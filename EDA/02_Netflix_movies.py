@@ -221,5 +221,3 @@ sns.barplot(y=movie_types.index, x=movie_types.values, hue=movie_types.values)
 plt.ylabel('')
 plt.xlabel('Number of movies')
 plt.title(f'Top {top} popular movie types')
-
-#%%
