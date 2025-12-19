@@ -8,7 +8,7 @@ import numpy as np
 import sys
 from matplotlib import cm
 
-sys.path.insert(0, r'C:\Users\YanGuo\Documents\Kaggle-learn\01_E-commerce_Brazil')
+sys.path.insert(0, r'C:\Users\YanGuo\Documents\Kaggle-learn\EDA')
 from viz_utils import *
 sns.set_style("white")
 
