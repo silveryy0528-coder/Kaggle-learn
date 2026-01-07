@@ -8,7 +8,6 @@ import numpy as np
 import sys
 from matplotlib import cm
 
-sys.path.insert(0, r'C:\Users\YanGuo\Documents\Kaggle-learn\EDA')
 from viz_utils import *
 sns.set_style("white")
 
@@ -85,7 +84,7 @@ day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
 time_order = ['Night', 'Morning', 'Afternoon', 'Evening']
 orders_over_period = (
     olist_orders
-    .groupby('timeofday')
+    .groupby('timeofday', observed=False)
     .size()
     .reset_index(name='num_orders')
 )
