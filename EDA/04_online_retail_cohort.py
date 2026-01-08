@@ -7,7 +7,8 @@ import datetime as dt
 import kagglehub
 from viz_utils import *
 sns.set_style("whitegrid")
-
+# Cohort analysis for online retail dataset, time-based customer behavior.
+# Focusing on customer retention and purchase behavior over time after joining.
 
 folder_path = kagglehub.dataset_download("mashlyn/online-retail-ii-uci")
 print("Path to dataset files:", folder_path)
