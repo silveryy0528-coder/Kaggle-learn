@@ -1,3 +1,5 @@
 .venv_*
 .git/*
 *pycache*
+*bigquery-key*
+*vscode*
