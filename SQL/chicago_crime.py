@@ -129,3 +129,8 @@ sns.lineplot(data=violent_by_month)
 sns.lineplot(
     x=violent_month_average['month'], y=violent_month_average['average'],
     color='black', label='Average', linewidth=2.5)
+plt.legend(ncols=8)
+plt.title('Monthly Violent Crimes in Chicago (2001-2025)')
+plt.xlabel('Month')
+plt.ylabel('Number of Violent Crimes')
+plt.show()
