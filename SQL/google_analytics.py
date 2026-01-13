@@ -132,11 +132,18 @@ query_sequence = """
 SELECT
     fullVisitorID,
     visitId,
-    hits.hitNumber
-FROM `bigquery-public-data.google_analytics_sample.ga_sessions_20160801`,
+    ARRAY_TO_STRING(
+        ARRAY_AGG(
+            hits.page.pagePath
+            ORDER BY hits.hitNumber),
+        '->') AS page_path
+FROM `bigquery-public-data.google_analytics_sample.ga_sessions_*`,
     UNNEST(hits) AS hits
-# WHERE _TABLE_SUFFIX BETWEEN '20170701' AND '20170731'
-WHERE hits.type = 'PAGE'
+WHERE
+    _TABLE_SUFFIX BETWEEN '20170701' AND '20170731'
+    AND hits.type = 'PAGE'
+GROUP BY fullVisitorID, visitId
+ORDER BY fullVisitorID
 """
 safe_config = bigquery.QueryJobConfig(maximum_bytes_billed=10**10)
 query_job = client.query(query=query_sequence, job_config=safe_config)
