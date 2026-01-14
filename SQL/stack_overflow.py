@@ -68,6 +68,7 @@ results = query_job.result().to_dataframe()
 results.head(10)
 
 #%%
+# What are 10 of the “easier” gold badges to earn?
 query_gold_badges = """
 SELECT
     name AS badge_name,
@@ -86,72 +87,39 @@ results = query_job.result().to_dataframe()
 results.head(10)
 
 #%%
+# Which day of the week has most questions answered within an hour?
 query_answers = """
-WITH questions_with_answers AS (
+WITH all_questions_and_answers AS (
     SELECT
         q.id AS question_id,
-        q.creation_date AS asked_date,
-        a.id AS answer_id,
-        a.creation_date AS answered_date,
-        TIMESTAMP_DIFF(a.creation_date, q.creation_date, MINUTE) AS elapsed_minutes,
+        EXTRACT(DAYOFWEEK FROM q.creation_date) AS day_of_week,
+        TIMESTAMP_DIFF(a.creation_date, q.creation_date, MINUTE) AS answered_in_minutes,
         ROW_NUMBER() OVER (
             PARTITION BY q.id
             ORDER BY a.creation_date
         ) AS answer_rank
     FROM `bigquery-public-data.stackoverflow.posts_questions` as q
-    INNER JOIN `bigquery-public-data.stackoverflow.posts_answers` as a
+    LEFT JOIN `bigquery-public-data.stackoverflow.posts_answers` as a
         ON q.id = a.parent_id
 ),
-answered_in_one_hour AS (
+first_answer AS (
     SELECT
         question_id,
-        EXTRACT(DAYOFWEEK FROM asked_date) AS day_of_week,
-        CASE EXTRACT (DAYOFWEEK FROM asked_date)
-            WHEN 1 THEN 'Sunday'
-            WHEN 2 THEN 'Monday'
-            WHEN 3 THEN 'Tuesday'
-            WHEN 4 THEN 'Wednesday'
-            WHEN 5 THEN 'Thursday'
-            WHEN 6 THEN 'Friday'
-            WHEN 7 THEN 'Saturday'
-        END AS day_name,
-        answer_id AS first_answer_id,
-        elapsed_minutes
-    FROM questions_with_answers
-    WHERE
-        answer_rank = 1
-        AND elapsed_minutes > 0
-        AND elapsed_minutes <= 60
+        day_of_week,
+        answered_in_minutes,
+        IF(answered_in_minutes BETWEEN 1 AND 60, TRUE, FALSE) AS answered_in_one_hour
+    FROM all_questions_and_answers
+    WHERE answer_rank = 1
 )
 SELECT
     day_of_week,
-    day_name,
-    COUNT(DISTINCT question_id) AS num_questions
-FROM answered_in_one_hour
-GROUP BY day_of_week, day_name
-ORDER BY num_questions DESC
+    COUNT(DISTINCT question_id) AS total_num_questions,
+    COUNTIF(answered_in_one_hour) AS questions_answered_in_one_hour,
+    COUNTIF(answered_in_one_hour) / COUNT(DISTINCT question_id) * 100 AS percent
+FROM first_answer
+GROUP BY day_of_week
 """
 safe_config = bigquery.QueryJobConfig(maximum_bytes_billed=10**10)
 query_job = client.query(query=query_answers, job_config=safe_config)
 results = query_job.result().to_dataframe()
 results.head(10)
-#%%
-"""
-SELECT
-    parent_id AS question_id,
-    COUNT(DISTINCT id) AS num_answers
-FROM `bigquery-public-data.stackoverflow.posts_answers`
-GROUP BY parent_id
-ORDER BY num_answers DESC
-LIMIT 10"""
-
-
-"""
-SELECT
-    id AS answer_id,
-    creation_date AS answered_date
-FROM `bigquery-public-data.stackoverflow.posts_answers`
-WHERE parent_id = 184618
-ORDER BY answered_date
-LIMIT 10
-"""
