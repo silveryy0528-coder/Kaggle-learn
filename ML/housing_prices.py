@@ -1,5 +1,10 @@
 #%%
+import copy
+import sys
+sys.path.insert(0, '../ML')
+
 import pandas as pd
+import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split, cross_val_score
@@ -7,47 +12,32 @@ from sklearn.tree import plot_tree
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 
+import utils
 random_state = 1
-
-def select_high_corr_features(df, target='SalePrice', lower_bound=0.25, print_corr=False):
-    corr = df.corr(numeric_only=True)[target].sort_values(ascending=False)
-    corr = corr[abs(corr) > lower_bound].iloc[1:]
-    if print_corr:
-        print(f'#### Numerical features with high correlation ####\n{corr}')
-    return corr
-
-
-def find_feature_importance(model, corr):
-    data = {
-        'corr': corr.values,
-        'importance': model.feature_importances_
-    }
-    importances = pd.DataFrame(data=data, index=corr.index)
-    print(f'#### Importance on selected features ####\n{\
-        importances.sort_values(by='importance', ascending=False)}')
 
 
 #%%
 train_data_path = '../ML/housing_prices_train.csv'
-train_df = pd.read_csv(train_data_path)
+df = pd.read_csv(train_data_path)
+train_df = copy.deepcopy(df)
 
-corr = select_high_corr_features(train_df, lower_bound=0.25)
-features = [
-    'OverallQual', 'GrLivArea', 'GarageCars', 'GarageArea', 'TotalBsmtSF',
-    '1stFlrSF', 'FullBath', 'TotRmsAbvGrd', 'YearBuilt', 'YearRemodAdd',
-    'GarageYrBlt', 'MasVnrArea', 'Fireplaces', 'BsmtFinSF1', 'LotFrontage',
-    'WoodDeckSF', '2ndFlrSF', 'OpenPorchSF', 'LotArea'
-]
+corr = utils.select_high_corr_features(train_df, lower_bound=0.25, print_corr=False)
+numerical_features = corr.index
 
-print(f'#### Numeric features to use ####\n{train_df[features].columns}')
-X = train_df[features]
+# print(f'#### Numeric features to use ####\n{train_df[features].columns}')
+X = train_df[numerical_features]
 y = train_df.SalePrice
 
 #%%
 X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=random_state)
 
 preprocessor = SimpleImputer(strategy='median')
-rf_model = RandomForestRegressor(random_state=random_state)
+rf_model = RandomForestRegressor(
+    n_estimators=100,
+    max_depth=None,
+    min_samples_split=2,
+    random_state=random_state,
+    n_jobs=-1)
 
 pipeline = Pipeline([
     ('imputer', preprocessor),
@@ -57,12 +47,14 @@ pipeline = Pipeline([
 #%%
 pipeline.fit(X_train, y_train)
 
-rf_val_predictions = pipeline.predict(X_val)
-rf_val_mae = mean_absolute_error(rf_val_predictions, y_val)
+rf_train_preds = pipeline.predict(X_train)
+rf_val_preds = pipeline.predict(X_val)
 
-print("Validation MAE for Random Forest Model: {:,.0f}".format(rf_val_mae))
-# find_feature_importance(pipeline['model'], corr[features])
+print("Train MAE:", mean_absolute_error(y_train, rf_train_preds))
+print("Valid MAE:", mean_absolute_error(y_val, rf_val_preds))
 
+scores = cross_val_score(pipeline, X, y, cv=5, scoring='neg_mean_absolute_error')
+print(f'CV score: {-1 * np.mean(scores)}')
 
 # #%%
 # rf_model_on_full_data = RandomForestRegressor(random_state=random_state, max_depth=3)
