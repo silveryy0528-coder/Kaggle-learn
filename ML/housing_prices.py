@@ -6,6 +6,8 @@ sys.path.insert(0, '../ML')
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.tree import plot_tree
@@ -19,19 +21,44 @@ random_state = 1
 #%%
 train_data_path = '../ML/housing_prices_train.csv'
 df = pd.read_csv(train_data_path)
+
+#%%
 train_df = copy.deepcopy(df)
 
 corr = utils.select_high_corr_features(train_df, lower_bound=0.25, print_corr=False)
 numerical_features = corr.index
+categorical_features = [
+    'Neighborhood',
+    # 'MSZoning',
+    # 'BldgType',
+    # 'HouseStyle',
+    'KitchenQual',
+    'ExterQual',
+    # 'Foundation',
+    # 'HeatingQC'
+]
+
+features = copy.deepcopy(list(numerical_features))
+features.extend(categorical_features)
 
 # print(f'#### Numeric features to use ####\n{train_df[features].columns}')
-X = train_df[numerical_features]
+X = train_df[features]
 y = train_df.SalePrice
 
 #%%
 X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=random_state)
 
-preprocessor = SimpleImputer(strategy='median')
+numeric_transformer = SimpleImputer(strategy='median')
+categorical_transformer = Pipeline([
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))
+])
+
+preprocessor = ColumnTransformer([
+    ('num', numeric_transformer, numerical_features),
+    ('cat', categorical_transformer, categorical_features)
+])
+
 rf_model = RandomForestRegressor(
     n_estimators=100,
     max_depth=None,
@@ -40,7 +67,7 @@ rf_model = RandomForestRegressor(
     n_jobs=-1)
 
 pipeline = Pipeline([
-    ('imputer', preprocessor),
+    ('preprocessor', preprocessor),
     ('model', rf_model)
 ])
 
