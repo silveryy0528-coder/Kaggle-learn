@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.tree import plot_tree
@@ -26,19 +26,16 @@ train_df = copy.deepcopy(df)
 
 corr = utils.select_high_corr_features(train_df, lower_bound=0.25, print_corr=False)
 numerical_features = corr.index
-categorical_features = [
-    'Neighborhood',
-    # 'MSZoning',
-    # 'BldgType',
-    # 'HouseStyle',
-    'KitchenQual',
-    'ExterQual',
-    # 'Foundation',
-    # 'HeatingQC'
+nominal_features = ['Neighborhood']
+ordinal_features = ['KitchenQual', 'ExterQual']
+categories = [
+    ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    ['Po', 'Fa', 'TA', 'Gd', 'Ex']
 ]
+categorical_features = nominal_features + ordinal_features
 
-features = copy.deepcopy(list(numerical_features))
-features.extend(categorical_features)
+features = list(numerical_features) + categorical_features
+#%%
 
 # print(f'#### Numeric features to use ####\n{train_df[features].columns}')
 X = train_df[features]
@@ -48,14 +45,19 @@ y = train_df.SalePrice
 X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=random_state)
 
 numeric_transformer = SimpleImputer(strategy='median')
-categorical_transformer = Pipeline([
+nominal_transformer = Pipeline([
     ('imputer', SimpleImputer(strategy='most_frequent')),
     ('onehot', OneHotEncoder(handle_unknown='ignore'))
+])
+ordinal_transformer = Pipeline([
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('ordinal', OrdinalEncoder(categories=categories))
 ])
 
 preprocessor = ColumnTransformer([
     ('num', numeric_transformer, numerical_features),
-    ('cat', categorical_transformer, categorical_features)
+    ('nom', nominal_transformer, nominal_features),
+    ('ord', ordinal_transformer, ordinal_features)
 ])
 
 rf_model = RandomForestRegressor(
