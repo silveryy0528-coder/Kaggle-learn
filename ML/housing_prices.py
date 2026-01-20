@@ -10,7 +10,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from sklearn.metrics import mean_absolute_error
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.tree import plot_tree
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -18,31 +18,36 @@ from sklearn.pipeline import Pipeline
 import utils
 random_state = 1
 
+
 #%%
 train_data_path = '../ML/housing_prices_train.csv'
 df = pd.read_csv(train_data_path)
 
-train_df = copy.deepcopy(df)
+# Remove columns with too many missing values
+missing_val_count_by_column = df.isnull().sum()
+cols_to_keep = missing_val_count_by_column[missing_val_count_by_column < 100]
+train_df = df[cols_to_keep.index].copy()
 
-corr = utils.select_high_corr_features(train_df, lower_bound=0.25, print_corr=False)
-numerical_features = corr.index
-nominal_features = ['Neighborhood']
-ordinal_features = ['KitchenQual', 'ExterQual']
-categories = [
-    ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
-    ['Po', 'Fa', 'TA', 'Gd', 'Ex']
-]
-categorical_features = nominal_features + ordinal_features
-
-features = list(numerical_features) + categorical_features
 #%%
+corr = utils.select_high_corr_features(train_df, lower_bound=0.0, print_corr=False)
+numerical_features = corr.index
 
-# print(f'#### Numeric features to use ####\n{train_df[features].columns}')
+object_cols = train_df.select_dtypes(include=['object']).columns
+categorical_features = [col for col in object_cols if train_df[col].nunique() < 10]
+ordinal_features = ['KitchenQual', 'ExterQual', 'ExterCond', 'HeatingQC']
+nominal_features = list(set(categorical_features) - set(ordinal_features))
+grading_categories = ['Po', 'Fa', 'TA', 'Gd', 'Ex']
+categories = [
+    grading_categories,
+    grading_categories,
+    grading_categories,
+    grading_categories
+]
+features = list(numerical_features) + categorical_features
+
+#%%
 X = train_df[features]
 y = train_df.SalePrice
-
-#%%
-X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=random_state)
 
 numeric_transformer = SimpleImputer(strategy='median')
 nominal_transformer = Pipeline([
@@ -60,33 +65,33 @@ preprocessor = ColumnTransformer([
     ('ord', ordinal_transformer, ordinal_features)
 ])
 
-rf_model = RandomForestRegressor(
-    n_estimators=600,
-    max_depth=None,
-    min_samples_split=2,
-    min_samples_leaf=5,
-    max_features=0.7,
-    random_state=random_state,
-    n_jobs=-1)
+param_grid = {
+    'model__n_estimators': [400, 600, 800],
+    'model__min_samples_leaf': [3, 5, 7],
+    'model__max_features': [0.5, 0.7, 0.9]
+}
 
 pipeline = Pipeline([
     ('preprocessor', preprocessor),
-    ('model', rf_model)
+    ('model', RandomForestRegressor(random_state=random_state))
 ])
 
+grid_search = GridSearchCV(
+    estimator=pipeline,
+    param_grid=param_grid,
+    cv=5,
+    scoring='neg_mean_absolute_error',
+    n_jobs=-1,
+    verbose=1
+)
+
+grid_search.fit(X, y)
+print("Best CV MAE:", -grid_search.best_score_)
+print("Best parameters:")
+print(grid_search.best_params_)
+
 #%%
-pipeline.fit(X_train, y_train)
-
-rf_train_preds = pipeline.predict(X_train)
-rf_val_preds = pipeline.predict(X_val)
-
-print("Train MAE:", mean_absolute_error(y_train, rf_train_preds))
-print("Valid MAE:", mean_absolute_error(y_val, rf_val_preds))
-
-scores = cross_val_score(pipeline, X, y, cv=5, scoring='neg_mean_absolute_error')
-print(f"CV score: {-scores.mean()}")
-
-#%%
+pipeline = grid_search.best_estimator_
 pipeline.fit(X, y)
 
 test_data_path = '../ML/housing_prices_test.csv'
@@ -99,5 +104,6 @@ test_preds = pipeline.predict(X_test)
 data = {'Id': test_df.Id, 'SalePrice': test_preds}
 df_to_save = pd.DataFrame(data)
 outfile = '../ML/housing_prices_prediction.csv'
+print(f'Saving predictions to {outfile}')
 df_to_save.to_csv(outfile, sep=',', index=False)
 
