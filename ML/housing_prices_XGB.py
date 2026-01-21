@@ -18,6 +18,32 @@ import utils
 random_state = 42
 
 
+def create_area_features(df):
+    X_out = pd.DataFrame()
+    X_out['LivLotRatio'] = df['GrLivArea'] / df['LotArea']
+    X_out['Spaciousness'] = (df['1stFlrSF'] + df['2ndFlrSF']) / df['TotRmsAbvGrd']
+    X_out['TotalOutsideSF'] = df['OpenPorchSF'] + df['EnclosedPorch'] + \
+        df['3SsnPorch'] + df['ScreenPorch'] + df['WoodDeckSF']
+    return X_out
+
+
+def create_num_cat_interaction_feature(df, cat_col, num_col):
+    X_out = pd.get_dummies(df[cat_col], prefix=cat_col)
+    X_out = X_out.mul(df[num_col], axis=0)
+    return X_out
+
+
+def create_count_features(df, cat_cols, new_col_name):
+    X_out = pd.DataFrame()
+    X_out[new_col_name] = df[cat_cols].gt(0).sum(axis=1)
+    return X_out
+
+
+def create_cat_num_grouped_feature(df, cat_col, num_col, transform, new_col_name):
+    X_out = pd.DataFrame()
+    X_out[new_col_name] = df.groupby(cat_col)[num_col].transform(transform)
+    return X_out
+
 #%%
 train_data_path = '../ML/housing_prices_train.csv'
 df = pd.read_csv(train_data_path)
@@ -26,6 +52,19 @@ df = pd.read_csv(train_data_path)
 missing_val_count_by_column = df.isnull().sum()
 cols_to_keep = missing_val_count_by_column[missing_val_count_by_column < 100]
 train_df = df[cols_to_keep.index].copy()
+
+X_1 = create_area_features(train_df)
+X_2 = create_num_cat_interaction_feature(train_df, 'BldgType', 'GrLivArea')
+X_3 = create_count_features(
+    train_df,
+    cat_cols=['WoodDeckSF', 'OpenPorchSF', 'EnclosedPorch', '3SsnPorch', 'ScreenPorch'],
+    new_col_name='PorchCount')
+X_4 = create_cat_num_grouped_feature(
+    train_df,
+    cat_col='Neighborhood',
+    num_col='GrLivArea',
+    transform='median',
+    new_col_name='MedNhbdArea')
 
 #%%
 corr = utils.select_high_corr_features(train_df, lower_bound=0.0, print_corr=False)
@@ -96,16 +135,16 @@ print(f'Best CV score: {-grid_search.best_score_}')
 pipeline = grid_search.best_estimator_
 pipeline.fit(X, y)
 
-test_data_path = '../ML/housing_prices_test.csv'
-test_df = pd.read_csv(test_data_path)
+# test_data_path = '../ML/housing_prices_test.csv'
+# test_df = pd.read_csv(test_data_path)
 
-X_test = test_df[features]
+# X_test = test_df[features]
 
-test_preds = pipeline.predict(X_test)
+# test_preds = pipeline.predict(X_test)
 
-data = {'Id': test_df.Id, 'SalePrice': test_preds}
-df_to_save = pd.DataFrame(data)
-outfile = '../ML/housing_prices_prediction.csv'
-print(f'Saving predictions to {outfile}')
-df_to_save.to_csv(outfile, sep=',', index=False)
+# data = {'Id': test_df.Id, 'SalePrice': test_preds}
+# df_to_save = pd.DataFrame(data)
+# outfile = '../ML/housing_prices_prediction.csv'
+# print(f'Saving predictions to {outfile}')
+# df_to_save.to_csv(outfile, sep=',', index=False)
 
