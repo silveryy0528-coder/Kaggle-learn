@@ -4,6 +4,7 @@ import os
 sys.path.insert(0, '../ML')
 
 import pandas as pd
+import numpy as np
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import GridSearchCV
@@ -14,7 +15,7 @@ from sklearn.pipeline import Pipeline
 from xgboost import XGBRegressor
 
 import utils
-random_state = 1
+random_state = 42
 
 
 #%%
@@ -93,21 +94,18 @@ print(f'Best parameters: {grid_search.best_params_}')
 print(f'Best CV score: {-grid_search.best_score_}')
 
 pipeline = grid_search.best_estimator_
-
 pipeline.fit(X, y)
-preds = pipeline.predict(X)
-print(f'Training MAE: {mean_absolute_error(y, preds)}')
 
-# test_data_path = '../ML/housing_prices_test.csv'
-# test_df = pd.read_csv(test_data_path)
+test_data_path = '../ML/housing_prices_test.csv'
+test_df = pd.read_csv(test_data_path)
 
-# X_test = test_df[features]
+X_test = test_df[features]
 
-# test_preds = pipeline.predict(X_test)
+test_preds = pipeline.predict(X_test)
 
-# data = {'Id': test_df.Id, 'SalePrice': test_preds}
-# df_to_save = pd.DataFrame(data)
-# outfile = '../ML/housing_prices_prediction.csv'
-# print(f'Saving predictions to {outfile}')
-# df_to_save.to_csv(outfile, sep=',', index=False)
+data = {'Id': test_df.Id, 'SalePrice': test_preds}
+df_to_save = pd.DataFrame(data)
+outfile = '../ML/housing_prices_prediction.csv'
+print(f'Saving predictions to {outfile}')
+df_to_save.to_csv(outfile, sep=',', index=False)
 
