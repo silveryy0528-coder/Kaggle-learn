@@ -1,4 +1,6 @@
 #%%
+import os
+print(os.getcwd())
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -27,8 +29,11 @@ def plot_mi_scores(scores):
 
 
 #%%
-train_data_path = '../ML/housing_prices_train.csv'
+train_data_path = '../housing_prices/data/housing_prices_train_cleaned.csv'
 df = pd.read_csv(train_data_path)
+df.isna().sum().sort_values(ascending=False).head(10)
+
+#%%
 
 missing_val_count_by_column = df.isnull().sum()
 cols_to_keep = missing_val_count_by_column[missing_val_count_by_column == 0]
@@ -48,7 +53,4 @@ mi_scores = make_mi_scores(X, y, discrete_features)
 plot_mi_scores(mi_scores[:10])
 
 #%%
-# X.groupby('Neighborhood')['GrLivArea'].median().sort_values().plot.barh()
-lbl_enc = LabelEncoder()
-X['Neighborhood_enc'] = lbl_enc.fit_transform(X['Neighborhood'])
-train_df.groupby('Neighborhood')['SalePrice'].median().sort_values().plot.barh()
+train_df['GarageArea'].describe()

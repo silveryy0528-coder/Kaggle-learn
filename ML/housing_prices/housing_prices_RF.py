@@ -2,6 +2,7 @@
 import copy
 import sys
 import os
+print(os.getcwd())
 sys.path.insert(0, '../ML')
 
 import pandas as pd
@@ -18,9 +19,8 @@ from sklearn.pipeline import Pipeline
 import utils
 random_state = 1
 
-
 #%%
-train_data_path = '../ML/housing_prices_train.csv'
+train_data_path = '../housing_prices/data/housing_prices_train.csv'
 df = pd.read_csv(train_data_path)
 
 # Remove columns with too many missing values
@@ -94,7 +94,7 @@ print(grid_search.best_params_)
 pipeline = grid_search.best_estimator_
 pipeline.fit(X, y)
 
-test_data_path = '../ML/housing_prices_test.csv'
+test_data_path = '../housing_prices/data/housing_prices_test.csv'
 test_df = pd.read_csv(test_data_path)
 
 X_test = test_df[features]
@@ -103,7 +103,7 @@ test_preds = pipeline.predict(X_test)
 
 data = {'Id': test_df.Id, 'SalePrice': test_preds}
 df_to_save = pd.DataFrame(data)
-outfile = '../ML/housing_prices_prediction.csv'
+outfile = '../housing_prices/data/housing_prices_prediction_RF.csv'
 print(f'Saving predictions to {outfile}')
 df_to_save.to_csv(outfile, sep=',', index=False)
 
