@@ -55,26 +55,32 @@ split_date = '2016-01-01'
 train_idx = df_s.loc[X_lr.index, 'date'] < split_date
 test_idx = df_s.loc[X_lr.index, 'date'] >= split_date
 
-X_train, X_test = X_lr[train_idx], X_lr[test_idx]
-y_train, y_test = y[train_idx], y[test_idx]
+X_train_lr, X_test_lr = X_lr[train_idx], X_lr[test_idx]
+y_train_lr, y_test_lr = y[train_idx], y[test_idx]
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.metrics import mean_absolute_error
 
-lr = LinearRegression()
-lr.fit(X_train, y_train)
+lr = Ridge(alpha=0.1)#LinearRegression()
+lr.fit(X_train_lr, y_train_lr)
 
-y_train_pred = lr.predict(X_train)
-y_test_pred = lr.predict(X_test)
+y_train_pred = lr.predict(X_train_lr)
+y_test_pred = lr.predict(X_test_lr)
 
-df_s["residual"] = df_s["sales"] - df_s["lr_pred"]
+df_s.loc[valid_idx, "lr_pred"] = lr.predict(X_lr)
+residuals = df_s["sales"] - df_s["lr_pred"]
 
+bias = residuals.mean()
+print("LR residual mean (bias):", bias)
+
+df_s['lr_pred_corr'] = df_s['lr_pred'] + bias
+df_s['residual'] = df_s['sales'] - df_s['lr_pred_corr']
 
 #%%
 plt.figure(figsize=(14, 5))
 plt.plot(df_s.loc[X_lr.index, "date"], y, label="Actual", alpha=0.5)
-plt.plot(df_s.loc[X_train.index, "date"], y_train_pred, label="LR Train Fit")
-plt.plot(df_s.loc[X_test.index, "date"], y_test_pred, label="LR Forecast")
+plt.plot(df_s.loc[X_train_lr.index, "date"], y_train_pred, label="LR Train Fit")
+plt.plot(df_s.loc[X_test_lr.index, "date"], y_test_pred, label="LR Forecast")
 
 plt.axvline(pd.to_datetime(split_date), color="black", linestyle="--", label="Train/Test Split")
 plt.legend()
@@ -84,13 +90,11 @@ plt.show()
 #%%
 coef = pd.Series(lr.coef_, index=X_lr.columns)
 coef.sort_values().head(10), coef.sort_values().tail(10)
-print("Train MAE:", mean_absolute_error(y_train, y_train_pred))
-print("Test  MAE:", mean_absolute_error(y_test, y_test_pred))
+print("Train MAE:", mean_absolute_error(y_train_lr, y_train_pred))
+print("Test  MAE:", mean_absolute_error(y_test_lr, y_test_pred))
 
 #%%
 # ----- residual analysis -----
-
-
 plt.figure(figsize=(14, 4))
 plt.plot(df_s.loc[X_lr.index, "date"], df_s.loc[X_lr.index, "residual"])
 plt.axhline(0, color="black", linewidth=1)
@@ -107,7 +111,7 @@ plot_acf(df_s["residual"].dropna(), lags=30)
 plt.show()
 
 df_s.groupby('month')["residual"].mean().plot(kind="bar")
-plt.title("Mean Residual by Day of Week")
+plt.title("Mean Residual by Month")
 plt.show()
 
 mask = (df_s["date"] > "2016-04-01") & (df_s["date"] < "2016-05-01")
@@ -129,8 +133,8 @@ train_mask = (df_s["date"] < split_date) & df_s.index.isin(valid_idx)
 test_mask  = (df_s["date"] >= split_date) & df_s.index.isin(valid_idx)
 
 # LR predictions for the aligned rows
-lr_train_pred = df_s.loc[train_mask, "lr_pred"]
-lr_test_pred  = df_s.loc[test_mask, "lr_pred"]
+lr_train_pred = df_s.loc[train_mask, "lr_pred_corr"]
+lr_test_pred  = df_s.loc[test_mask, "lr_pred_corr"]
 
 # XGB features and target for aligned rows
 X_train = X_xgb.loc[train_mask]
@@ -155,8 +159,8 @@ y_test_pred_xgb = xgb_model.predict(X_test)
 
 #%%
 # Hybrid forecast
-hybrid_train = lr_train_pred + y_train_pred_xgb
-hybrid_test  = lr_test_pred + y_test_pred_xgb
+hybrid_train = lr_train_pred.values + y_train_pred_xgb
+hybrid_test  = lr_test_pred.values  + y_test_pred_xgb
 
 plt.figure(figsize=(14,5))
 plt.plot(df_s.loc[valid_idx, "date"], df_s.loc[valid_idx, "sales"], label="Actual", alpha=0.5)
@@ -166,3 +170,6 @@ plt.axvline(pd.to_datetime(split_date), color="black", linestyle="--", label="Tr
 plt.legend()
 plt.title("Hybrid Forecast: LR + XGB Residuals")
 plt.show()
+
+hybrid_residuals = y_test - hybrid_test
+print("Hybrid test residual median:", hybrid_residuals.mean())
