@@ -13,7 +13,7 @@ train_df = pd.read_csv(train_file_path, parse_dates=['date']) # explict about wh
 print(f'Products families: {train_df.family.unique()}')
 
 #%%
-store_nbr = 1
+store_nbr = 3
 families = ['GROCERY I', 'CLEANING']
 family = families[0]
 
