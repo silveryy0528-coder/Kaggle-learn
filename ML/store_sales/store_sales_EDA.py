@@ -5,6 +5,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from utils import *
+from statsmodels.graphics.tsaplots import plot_pacf
 
 # %%
 train_file_path = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\ML\store_sales\data\train.csv"
@@ -13,7 +14,7 @@ print(f'Products families: {train_df.family.unique()}')
 
 #%%
 store_nbr = 1
-families = ['DELI', 'CLEANING']
+families = ['GROCERY I', 'CLEANING']
 family = families[0]
 
 series = train_df[
@@ -23,6 +24,9 @@ series = train_df[
 series = series[['date', 'sales']]
 series = series.sort_values(by='date')
 series = series.set_index('date')
+
+plot_pacf(series, lags=12)
+plt.show()
 
 #%%
 moving_average = series.rolling(

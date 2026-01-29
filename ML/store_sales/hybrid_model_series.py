@@ -14,7 +14,7 @@ train_file_path = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\ML\store_sale
 train_df = pd.read_csv(train_file_path, parse_dates=['date']) # explict about which column has date
 
 store_nbr = 1
-family = 'DELI'
+family = 'GROCERY II'
 
 df_s = train_df[(train_df['store_nbr'] == store_nbr) & (train_df['family'] == family)].copy()
 df_s = df_s.sort_values('date')
@@ -36,7 +36,7 @@ for roll in rolls:
 
 #%% Create LR and XGB features
 lr_features = ['time_idx', 'dayofweek', 'month']
-xgb_features = ['lag_1', 'lag_7', 'roll_7']
+xgb_features = ['lag_1', 'lag_7']
 
 X_lr = df_s[lr_features]
 X_xgb = df_s[xgb_features]
@@ -69,7 +69,7 @@ df_s['lr_pred'] = lr.predict(X_lr)
 
 bias = (y_train_lr - y_train_pred_lr).mean()
 df_s['lr_pred_corr'] = df_s['lr_pred'] + bias
-df_s['residual'] = df_s['sales'] - df_s['lr_pred_corr']
+df_s['lr_residual'] = df_s['sales'] - df_s['lr_pred_corr']
 
 y_test_sales = df_s.loc[test_mask, "sales"]
 smape_lr = np.mean(
@@ -88,7 +88,8 @@ plt.legend()
 plt.title("Linear Regression: Trend + Seasonality")
 plt.draw()
 
-plot_acf(df_s["residual"].dropna(), lags=14)
+plot_acf(df_s["lr_residual"].dropna(), lags=14,\
+         title='ACF of LR forecasting residual')
 plt.draw()
 
 # coef = pd.Series(lr.coef_, index=X_lr.columns)
@@ -114,15 +115,16 @@ plt.draw()
 #%%
 # XGB features and target for aligned rows
 X_train_xgb, X_test_xgb = X_xgb[train_mask], X_xgb[test_mask]
-y_train_xgb = df_s.loc[train_mask, 'residual']
+y_train_xgb = df_s.loc[train_mask, 'lr_residual']
 
 xgb_model = xgb.XGBRegressor(
-    n_estimators=200,
-    max_depth=3,
-    learning_rate=0.1,
-    min_child_weight=20,
-    subsample=0.6,
-    colsample_bytree=0.8,
+    n_estimators=100,
+    max_depth=2,
+    learning_rate=0.05,
+    subsample=0.7,
+    colsample_bytree=0.7,
+    reg_alpha=1.0,
+    reg_lambda=5.0,
     random_state=42
 )
 
@@ -137,6 +139,7 @@ lr_train_pred = df_s.loc[train_mask, 'lr_pred_corr']
 lr_test_pred = df_s.loc[test_mask, 'lr_pred_corr']
 hybrid_train = lr_train_pred.values + y_train_pred_xgb
 hybrid_test  = lr_test_pred.values  + y_test_pred_xgb
+hybrid_residual = y_test_sales.values - hybrid_test
 
 plt.figure(figsize=(14, 5))
 plt.plot(df_s['date'], df_s['sales'], label="Actual", alpha=0.5)
@@ -158,3 +161,7 @@ print("Hybrid MAE:", mean_absolute_error(y_test_sales, hybrid_test))
 
 print("LR sMAPE:", smape_lr)
 print("Hybrid sMAPE:", smape_hybrid)
+
+plot_acf(hybrid_residual, lags=14,\
+         title='ACF of hybrid forecasting residual')
+plt.show()
