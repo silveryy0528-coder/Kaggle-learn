@@ -7,7 +7,6 @@ import xgboost as xgb
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error
 from statsmodels.graphics.tsaplots import plot_acf
-from sklearn.model_selection import ParameterGrid
 
 
 #%%
@@ -27,9 +26,6 @@ df_fam['time_idx'] = df_fam['date'].map(date_to_idx)
 df_fam['month'] = df_fam['date'].dt.month
 df_fam['dayofweek'] = df_fam['date'].dt.dayofweek
 df_fam['year'] = df_fam['date'].dt.year
-df_fam['time_idx_store'] = df_fam.groupby('store_nbr')['sales'].transform(
-    lambda x: (x != 0).cumsum() - 1)
-store_dummies = pd.get_dummies(df_fam['store_id'], prefix='store')
 
 lags = [1, 7]
 for lag in lags:
@@ -48,17 +44,21 @@ for roll in rolls:
         .mean())
 
 #%%
-lr_features = ['time_idx', 'dayofweek', 'month', ]
+lr_features = ['time_idx', 'dayofweek', 'month', 'store_id']
 xgb_features = ['lag_1', 'lag_7', 'store_id', 'dayofweek', 'month', 'year']
 
 X_lr = df_fam[lr_features]
 X_xgb = df_fam[xgb_features]
 
 X_lr = pd.get_dummies(
-    X_lr, columns=['dayofweek', 'month'], drop_first=True)
+    X_lr, columns=['dayofweek', 'month', 'store_id'], drop_first=True)
 X_xgb = pd.get_dummies(
     X_xgb, columns=['store_id', 'dayofweek', 'month'])
 y = df_fam['sales']
+
+store_dummies = pd.get_dummies(df_fam['store_id'], prefix='store', drop_first=True)
+for c in store_dummies.columns:
+    X_lr[f'{c}_time'] = store_dummies[c] * df_fam['time_idx']
 
 valid_idx = X_xgb.dropna().index
 X_lr = X_lr.loc[valid_idx]
@@ -75,7 +75,7 @@ test_mask  = df_fam['date'] >= split_date
 X_train_lr, X_test_lr = X_lr[train_mask], X_lr[test_mask]
 y_train_lr, y_test_lr = y[train_mask], y[test_mask]
 
-lr = Ridge(alpha=1.0)
+lr = Ridge(alpha=4.0)
 lr.fit(X_train_lr, y_train_lr)
 
 y_train_pred_lr = lr.predict(X_train_lr)
@@ -87,67 +87,44 @@ bias = (y_train_lr - y_train_pred_lr).mean()
 df_fam['lr_pred_corr'] = df_fam['lr_pred'] + bias
 df_fam['lr_residual'] = df_fam['sales'] - df_fam['lr_pred_corr']
 
-#%%
-store_dummies = pd.get_dummies(df_fam['store_id'], prefix='store')
-time_idx_store_cols = {f"time_idx_{col}": df_fam['time_idx'].values * store_dummies[col].values
-                       for col in store_dummies.columns}
-time_idx_store_df = pd.DataFrame(time_idx_store_cols, index=df_fam.index)
+#%% Extra features for XGB
+# store_dummies = pd.get_dummies(df_fam['store_id'], prefix='store', drop_first=False)
+# time_idx_store_cols = {f"time_idx_{col}": df_fam['time_idx'].values * store_dummies[col].values
+#                        for col in store_dummies.columns}
+# time_idx_store_df = pd.DataFrame(time_idx_store_cols, index=df_fam.index)
 
-lag_cols = ['lag_1', 'lag_7']
-lag_store_cols = {}
-for lag in lag_cols:
-    for col in store_dummies.columns:
-        lag_store_cols[f"{lag}_{col}"] = df_fam[lag].values * store_dummies[col].values
+# lag_cols = ['lag_1', 'lag_7']
+# lag_store_cols = {}
+# for lag in lag_cols:
+#     for col in store_dummies.columns:
+#         lag_store_cols[f"{lag}_{col}"] = df_fam[lag].values * store_dummies[col].values
 
-lag_store_df = pd.DataFrame(lag_store_cols, index=df_fam.index)
+# lag_store_df = pd.DataFrame(lag_store_cols, index=df_fam.index)
 
-residual_store_cols = {f"resid_{col}": df_fam['lr_residual'].values * store_dummies[col].values
-                       for col in store_dummies.columns}
+# residual_store_cols = {f"resid_{col}": df_fam['lr_residual'].values * store_dummies[col].values
+#                        for col in store_dummies.columns}
 
-resid_store_df = pd.DataFrame(residual_store_cols, index=df_fam.index)
-X_xgb = pd.concat([X_xgb, time_idx_store_df], axis=1)
+# resid_store_df = pd.DataFrame(residual_store_cols, index=df_fam.index)
+# X_xgb = pd.concat([X_xgb, time_idx_store_df], axis=1)
 
 #%%
 X_train_xgb, X_test_xgb = X_xgb[train_mask], X_xgb[test_mask]
 y_train_xgb = df_fam.loc[train_mask, 'lr_residual']
 
-param_grid = {
-    'reg_alpha': [0.0, 0.5, 1.0, 2.0],
-    'reg_lambda': [1.0, 3.0, 5.0, 7.0]
-}
+model = xgb.XGBRegressor(
+    n_estimators=500,
+    max_depth=4,
+    learning_rate=0.05,
+    subsample=0.7,
+    colsample_bytree=0.7,
+    reg_alpha=0.,
+    reg_lambda=1.,
+    random_state=42
+)
+model.fit(X_train_xgb, y_train_xgb)
 
-best_mae = np.inf
-best_params = None
-best_model = None
-
-for params in ParameterGrid(param_grid):
-    model = xgb.XGBRegressor(
-        n_estimators=400,
-        max_depth=4,
-        learning_rate=0.05,
-        subsample=0.7,
-        colsample_bytree=0.7,
-        reg_alpha=params['reg_alpha'],
-        reg_lambda=params['reg_lambda'],
-        random_state=42
-    )
-    model.fit(X_train_xgb, y_train_xgb)
-
-    # Evaluate on training residuals
-    y_pred_train = model.predict(X_train_xgb)
-    mae = mean_absolute_error(y_train_xgb, y_pred_train)
-
-    if mae < best_mae:
-        best_mae = mae
-        best_params = params
-        best_model = model
-
-print("Best MAE on training residuals:", best_mae)
-print("Best reg_alpha and reg_lambda:", best_params)
-
-# Use best_model for predictions
-y_train_pred_xgb = best_model.predict(X_train_xgb)
-y_test_pred_xgb  = best_model.predict(X_test_xgb)
+y_train_pred_xgb = model.predict(X_train_xgb)
+y_test_pred_xgb  = model.predict(X_test_xgb)
 
 #%% Hybrid forecast
 lr_train_pred = df_fam.loc[train_mask, 'lr_pred_corr']
@@ -163,8 +140,6 @@ hybrid_pred_full[test_mask]  = hybrid_test
 #%%
 n_rows, n_cols = 3, 3
 num_stores = n_rows * n_cols
-# stores_to_check = sorted(
-#     np.random.choice(df_fam['store_nbr'].unique(), size=num_stores, replace=False))
 stores_to_check = sorted([1, 8, 14, 16, 23, 27, 7, 40, 42])
 
 fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 12), sharex=True)
