@@ -150,7 +150,6 @@ plt.legend()
 plt.title("Hybrid Forecast: LR + XGB Residuals")
 plt.show()
 
-y_test_sales = df_s.loc[test_mask, "sales"]
 smape_hybrid = np.mean(
     2 * np.abs(y_test_sales.values - hybrid_test) /
     (np.abs(y_test_sales.values) + np.abs(hybrid_test) + 1e-8)

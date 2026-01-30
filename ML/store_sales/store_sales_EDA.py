@@ -4,7 +4,7 @@ import os
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-from utils import *
+# from utils import *
 from statsmodels.graphics.tsaplots import plot_pacf
 
 # %%
@@ -13,7 +13,7 @@ train_df = pd.read_csv(train_file_path, parse_dates=['date']) # explict about wh
 print(f'Products families: {train_df.family.unique()}')
 
 #%%
-store_nbr = 3
+store_nbr = 42
 families = ['GROCERY I', 'CLEANING']
 family = families[0]
 
@@ -24,6 +24,7 @@ series = train_df[
 series = series[['date', 'sales']]
 series = series.sort_values(by='date')
 series = series.set_index('date')
+print(series.head())
 
 plot_pacf(series, lags=12)
 plt.show()
