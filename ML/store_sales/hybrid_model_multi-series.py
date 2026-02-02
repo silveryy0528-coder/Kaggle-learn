@@ -8,13 +8,13 @@ from sklearn.linear_model import Ridge
 from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import mean_absolute_error
 try:
-    from utils import compute_family_metrics
+    import utils
 except:
     import sys
     sys.path.insert(0, r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\ML\store_sales')
-    from utils import compute_family_metrics
+    import utils
 
-diagnostics = False
+diagnostics = True
 lr_alpha = 4.0
 lags = [1, 7]
 rolls = [7, 14]
@@ -127,7 +127,6 @@ def run_family_hybrid(df, family):
             xgb_model = model
             best_params = params
 
-    print(f'Best params: {best_params}')
     xgb_pred = np.full(len(df_fam), np.nan)     # E[residual | lags, calendar, store]
     xgb_pred[train_mask] = xgb_model.predict(X_train_xgb)
     xgb_pred[test_mask] = xgb_model.predict(X_test_xgb)
@@ -139,12 +138,16 @@ def run_family_hybrid(df, family):
 
     explained_frac = 1 - np.var(y_test_xgb - xgb_pred[test_mask]) / np.var(y_test_xgb)
 
-    metrics = compute_family_metrics(df_fam, split_date, lr_model, X_lr, xgb_pred)
+    metrics = utils.compute_family_metrics(df_fam, split_date, lr_model, X_lr, xgb_pred)
+    metrics['explained_frac'] = explained_frac
     results = {
         "family": family,
-        **metrics
+        "metrics": metrics,
+        "predictions": {
+            "lr": df_fam['lr_pred_corr'].values,
+            'hybrid': df_fam['hybrid_pred'].values
+        }
     }
-    results['explained_frac'] = explained_frac
 
     # Diagnostic
     if not diagnostics:
@@ -212,26 +215,48 @@ def run_family_hybrid(df, family):
     return results
 
 
+def run_family_diagnostics(df, family):
+    results = run_family_hybrid(df, family)
+
+    metrics = results['metrics']
+    preds = results['predictions']
+
+    policy = utils.family_policy(metrics)
+    final_pred = preds[policy]
+
+    return {
+        "family": family,
+        "policy": policy,
+        **metrics,
+        "final_pred": final_pred
+    }
+
+
 #%%
 train_file_path = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\ML\store_sales\data\train.csv"
 train_df = pd.read_csv(train_file_path, parse_dates=['date'])
 
 families = [
-    # 'GROCERY I',
-    # 'BEVERAGES',
+    'GROCERY I',
+    'BEVERAGES',
     'PRODUCE',
-    # 'DAIRY',
-    # 'BREAD/BAKERY',
-    # 'BOOKS',
-    # 'MAGAZINES',
-    # 'HOME APPLIANCES',
-    # 'SCHOOL AND OFFICE SUPPLIES'
+    'MEATS',
+    'FROZEN FOODS',
+    'BOOKS',
+    'BABY CARE'
 ]
 
 all_results = []
+all_predictions = {}
+
 for family in families:
-    res = run_family_hybrid(train_df, family=family)
-    all_results.append(res)
+    res = run_family_diagnostics(train_df, family=family)
+    all_results.append({
+            k: v for k, v in res.items() if k != "final_pred"
+        })
+
+    all_predictions[family] = res["final_pred"]
+
 results_df = pd.DataFrame(all_results)
 
 #%%

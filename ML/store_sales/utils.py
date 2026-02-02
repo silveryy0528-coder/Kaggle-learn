@@ -46,8 +46,18 @@ def compute_family_metrics(
     return {
         "lr_mae": lr_mae,
         "hybrid_mae": hybrid_mae,
-        "mae_improvement_pct [%]": (lr_mae - hybrid_mae) / lr_mae * 100,
+        "mae_improvement_pct": (lr_mae - hybrid_mae) / lr_mae * 100,
         "mean_residual_acf": mean_resid_acf,
         "xgb_contrib_ratio": xgb_contrib_ratio,
         "store_slope_variance": slope_variance
     }
+
+
+def family_policy(metrics,
+                  min_explained_frac=0.05,
+                  min_mae_improvement_pct=5.0):
+    if metrics['explained_frac'] < min_explained_frac:
+        return 'lr'
+    if metrics['mae_improvement_pct'] < min_mae_improvement_pct:
+        return 'lr'
+    return 'hybrid'
