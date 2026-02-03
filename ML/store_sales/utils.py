@@ -1,8 +1,7 @@
+#%%
 import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_absolute_error
-from statsmodels.tsa.stattools import acf
-
 
 def compute_family_metrics(
     df_fam,
@@ -61,3 +60,92 @@ def family_policy(metrics,
     if metrics['mae_improvement_pct'] < min_mae_improvement_pct:
         return 'lr'
     return 'hybrid'
+
+
+def build_features(
+        df_fam, lags=(1, 7, 28), rolls=(7,)
+):
+    """
+    Build LR and XGB features for a single family.
+    """
+    df_fam = df_fam.sort_values(['store_nbr', 'date'])
+    df_fam['store_id'] = df_fam['store_nbr'].astype(str)
+
+    # ------- time features -------
+    unique_dates = df_fam['date'].sort_values().unique()
+    date_to_idx = {date: i for i, date in enumerate(unique_dates)}
+
+    df_fam['time_idx'] = df_fam['date'].map(date_to_idx)
+    df_fam['month'] = df_fam['date'].dt.month
+    df_fam['dayofweek'] = df_fam['date'].dt.dayofweek
+    df_fam['year'] = df_fam['date'].dt.year
+
+    # ------- lag / rolling -------
+    for lag in lags:
+        df_fam[f'lag_{lag}'] = (
+            df_fam.groupby('store_nbr')['sales'].shift(lag)
+        )
+    for roll in rolls:
+        df_fam[f'roll_{roll}'] = (
+            df_fam.groupby('store_nbr')['sales']
+            .shift(1)
+            .rolling(window=roll)
+            .mean()
+        )
+
+    # ------- activity gate -------
+    df_fam["is_active"] = (
+        (df_fam["lag_1"] > 0) | (df_fam["lag_7"] > 0)
+    ).astype(int)
+
+    # ------- feature selection -------
+    lr_features = ['time_idx', 'dayofweek', 'month', 'store_id']
+    xgb_features = [
+        'lag_1', 'lag_7', 'roll_7',
+        'store_id', 'dayofweek', 'month', 'year'
+    ]
+
+    X_lr = df_fam[lr_features]
+    X_xgb = df_fam[xgb_features]
+    y = df_fam["sales"]
+
+    # ------- dummies -------
+    dummy_features = ['store_id', 'dayofweek', 'month']
+    X_lr = pd.get_dummies(
+        X_lr, columns=dummy_features, drop_first=True
+    )
+    X_xgb = pd.get_dummies(
+        X_xgb, columns=dummy_features, drop_first=False
+    )
+
+    # ------- store-specific slopes (LR only) -------
+    store_dummies = pd.get_dummies(
+        df_fam['store_id'], prefix='store', drop_first=True
+    )
+    for c in store_dummies.columns:
+        X_lr[f'{c}_time'] = store_dummies[c] * df_fam['time_idx']
+
+    # ------- drop invalid rows (NaNs in XGB) -------
+    valid_idx = X_xgb.dropna().index
+    X_lr = X_lr.loc[valid_idx]
+    X_xgb = X_xgb.loc[valid_idx]
+    if y is not None:
+        y = y.loc[valid_idx]
+    df_fam = df_fam.loc[valid_idx]
+
+    return X_lr, X_xgb, y, df_fam
+
+
+#%%
+if __name__ == '__main__':
+    train_file_path = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\ML\store_sales\data\train.csv"
+    train_df = pd.read_csv(train_file_path, parse_dates=['date'])
+
+    test_file_path = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\ML\store_sales\data\test.csv"
+    test_df = pd.read_csv(test_file_path, parse_dates=['date'])
+
+    X_lr_tr, X_xgb_tr, y_tr,  = build_features(
+        train_df[train_df['family'] == 'GROCERY I'].copy()
+    )
+    X_lr_tr.head()
+

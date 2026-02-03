@@ -32,51 +32,8 @@ param_grid = {
 
 def run_family_hybrid(df, family):
     df_fam = df[df['family'] == family].copy()
-    df_fam = df_fam.sort_values(['store_nbr', 'date'])
-    df_fam['store_id'] = df_fam['store_nbr'].astype(str)
 
-    # Feature engineering
-    unique_dates = df_fam['date'].sort_values().unique()
-    date_to_idx = {date: i for i, date in enumerate(unique_dates)}
-
-    df_fam['time_idx'] = df_fam['date'].map(date_to_idx)
-    df_fam['month'] = df_fam['date'].dt.month
-    df_fam['dayofweek'] = df_fam['date'].dt.dayofweek
-    df_fam['year'] = df_fam['date'].dt.year
-
-    for lag in lags:
-        df_fam[f'lag_{lag}'] = (df_fam.groupby('store_nbr')['sales'].shift(lag))
-    for roll in rolls:
-        df_fam[f'roll_{roll}'] = (df_fam.groupby('store_nbr')['sales'].shift(1).rolling(window=roll).mean())
-
-    df_fam["is_active"] = ((df_fam["lag_1"] > 0) | (df_fam["lag_7"] > 0)).astype(int)
-
-    # Feature selection
-    lr_features = ['time_idx', 'dayofweek', 'month', 'store_id']
-    xgb_features = ['lag_1', 'lag_7', 'roll_7', 'store_id', 'dayofweek', 'month', 'year']
-
-    X_lr = df_fam[lr_features]
-    X_xgb = df_fam[xgb_features]
-
-    X_lr = pd.get_dummies(
-        X_lr,
-        columns=['dayofweek', 'month', 'store_id'],
-        drop_first=True)
-    X_xgb = pd.get_dummies(
-        X_xgb,
-        columns=['store_id', 'dayofweek', 'month'],
-        drop_first=False)
-    y = df_fam['sales']
-
-    store_dummies = pd.get_dummies(df_fam['store_id'], prefix='store', drop_first=True)
-    for c in store_dummies.columns:
-        X_lr[f'{c}_time'] = store_dummies[c] * df_fam['time_idx']
-
-    valid_idx = X_xgb.dropna().index
-    df_fam = df_fam.loc[valid_idx]
-    X_lr = X_lr.loc[valid_idx]
-    X_xgb = X_xgb.loc[valid_idx]
-    y = y.loc[valid_idx]
+    X_lr, X_xgb, y, df_fam = utils.build_features(df_fam, lags=lags, rolls=rolls)
 
     # Stage 1 - LR
     train_mask = df_fam['date'] < split_date
@@ -239,26 +196,23 @@ train_df = pd.read_csv(train_file_path, parse_dates=['date'])
 
 families = [
     'GROCERY I',
-    'BEVERAGES',
-    'PRODUCE',
-    'MEATS',
-    'FROZEN FOODS',
-    'BOOKS',
-    'BABY CARE'
+    # 'BEVERAGES',
+    # 'PRODUCE',
+    # 'MEATS',
+    # 'FROZEN FOODS',
+    # 'BOOKS',
+    # 'BABY CARE'
 ]
 
-all_results = []
-all_predictions = {}
+family_result = []
 
 for family in families:
-    res = run_family_diagnostics(train_df, family=family)
-    all_results.append({
-            k: v for k, v in res.items() if k != "final_pred"
+    diag = run_family_diagnostics(train_df, family=family)
+    family_result.append({
+            k: v for k, v in diag.items() if k != "final_pred"
         })
 
-    all_predictions[family] = res["final_pred"]
-
-results_df = pd.DataFrame(all_results)
+results_df = pd.DataFrame(family_result)
 
 #%%
 '''
