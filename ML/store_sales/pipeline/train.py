@@ -85,10 +85,7 @@ def train_all_families(train_df, diagnostic_results):
 #%%
 train_file_path = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\ML\store_sales\data\train.csv"
 train_df = pd.read_csv(train_file_path, parse_dates=['date'])
-families = [
-    'GROCERY I',
-    'PRODUCE',
-]
+families = train_df['family'].unique()
 
 diagnostics_results = diagnostics.run_all_family_diagnostics(train_df, families)
 diagnostics_results

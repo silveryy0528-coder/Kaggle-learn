@@ -17,11 +17,12 @@ split_date = '2016-01-01'
 lr_alpha = 4.0
 param_grid = {
     'max_depth': [4, 5, 6],
+    'min_child_weight': [1, 5, 10],
     'learning_rate': [0.05, 0.1],
-    'n_estimators': [400, 500, 600],
+    'n_estimators': [400, 600],
     'subsample': [0.7],
-    'colsample_bytree': [0.8],
-    'reg_alpha': [0.5],
+    'colsample_bytree': [0.7],
+    'reg_alpha': [0, 0.5],
     'reg_lambda': [1., 2.]
 }
 
@@ -204,5 +205,4 @@ if __name__ == '__main__':
         'MEATS',
         # 'BOOKS',
     ]
-
-    results = run_all_family_diagnostics(train_df, families)
+    # results = run_all_family_diagnostics(train_df, families)
