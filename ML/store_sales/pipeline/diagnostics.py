@@ -137,8 +137,6 @@ def run_family_hybrid(df, family):
             xgb_model = model
             best_params = params
 
-    print(f'Best XGB params for family {family}: {best_params}')
-
     xgb_pred = np.full(len(df_fam), np.nan)
     xgb_pred[train_mask] = xgb_model.predict(X_train_xgb)
     xgb_pred[test_mask] = xgb_model.predict(X_test_xgb)
@@ -151,7 +149,8 @@ def run_family_hybrid(df, family):
     metrics = compute_family_metrics(df_fam, split_date, lr_model, X_lr)
     results = {
         "family": family,
-        "metrics": metrics
+        "metrics": metrics,
+        "xgb_params": best_params
     }
     return results
 
@@ -177,7 +176,8 @@ def run_single_family_diagnostics(df, family):
     return {
         "family": family,
         "policy": policy,
-        **metrics,
+        "xgb_params": results['xgb_params'],
+        **metrics
     }
 
 
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     families = [
         # 'GROCERY I',
         'PRODUCE',
-        # 'MEATS',
+        'MEATS',
         # 'BOOKS',
     ]
 
