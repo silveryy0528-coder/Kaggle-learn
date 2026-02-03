@@ -14,11 +14,20 @@ except:
     sys.path.insert(0, r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\ML\store_sales')
     import utils
 
-diagnostics = True
+diagnostics = False
 lr_alpha = 4.0
-lags = [1, 7]
+lags = [1, 7, 28]
 rolls = [7, 14]
 split_date = '2016-01-01'
+param_grid = {
+    'max_depth': [4, 5, 6],
+    'learning_rate': [0.05, 0.1],
+    'n_estimators': [400, 500, 600],
+    'subsample': [0.7],
+    'colsample_bytree': [0.8],
+    'reg_alpha': [0.5],
+    'reg_lambda': [1., 2.]
+}
 
 
 def run_family_hybrid(df, family):
@@ -44,7 +53,7 @@ def run_family_hybrid(df, family):
 
     # Feature selection
     lr_features = ['time_idx', 'dayofweek', 'month', 'store_id']
-    xgb_features = ['lag_1', 'lag_7', 'store_id', 'dayofweek', 'month', 'year']
+    xgb_features = ['lag_1', 'lag_7', 'roll_7', 'store_id', 'dayofweek', 'month', 'year']
 
     X_lr = df_fam[lr_features]
     X_xgb = df_fam[xgb_features]
@@ -92,15 +101,6 @@ def run_family_hybrid(df, family):
     y_train_xgb = df_fam.loc[train_mask, 'lr_residual']
     y_test_xgb = df_fam.loc[test_mask, 'lr_residual']
 
-    param_grid = {
-        'max_depth': [4, 5, 6],
-        'learning_rate': [0.05, 0.1],
-        'n_estimators': [400, 500, 600],
-        'subsample': [0.7],
-        'colsample_bytree': [0.8],
-        'reg_alpha': [0.5],
-        'reg_lambda': [1., 2.]
-    }
     best_mae = float('inf')
     best_params = None
     for params in ParameterGrid(param_grid):
@@ -127,6 +127,7 @@ def run_family_hybrid(df, family):
             xgb_model = model
             best_params = params
 
+    print(f'Best XGB params for family {family}: {best_params}')
     xgb_pred = np.full(len(df_fam), np.nan)     # E[residual | lags, calendar, store]
     xgb_pred[train_mask] = xgb_model.predict(X_train_xgb)
     xgb_pred[test_mask] = xgb_model.predict(X_test_xgb)
@@ -288,4 +289,4 @@ High store_slope_variance -> trend differs by store (store_time interaction)
 '''
 if diagnostics: plt.show()
 print('\n')
-results_df
+print(results_df)
