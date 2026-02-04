@@ -48,6 +48,7 @@ dp = DeterministicProcess(
 X = dp.in_sample()
 X['NewYear'] = (X.index.dayofyear == 1)
 
+#%%
 model = LinearRegression(fit_intercept=False)
 model.fit(X, y)
 
