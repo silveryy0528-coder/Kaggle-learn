@@ -91,11 +91,16 @@ y = train_df.SalePrice
 X_train, X_val, y_train, y_val = train_test_split(
     X, y, train_size=0.7, random_state=42
 )
-y_mean = y_train.mean()
-y_std = y_train.std()
 
-y_train_scaled = (y_train - y_mean) / y_std
-y_val_scaled = (y_val - y_mean) / y_std
+# log transform
+y_train_log = np.log1p(y_train)
+y_val_log = np.log1p(y_val)
+
+y_mean = y_train_log.mean()
+y_std = y_train_log.std()
+
+y_train_scaled = (y_train_log - y_mean) / y_std
+y_val_scaled = (y_val_log - y_mean) / y_std
 
 numerical_cols = [cname for cname in X.columns if X[cname].dtype in ['int64', 'float64']]
 ordinal_cols = ['KitchenQual', 'BsmtQual', 'ExterQual']
@@ -144,6 +149,7 @@ early_stopping = callbacks.EarlyStopping(
     restore_best_weights=True
 )
 reduce_lr = callbacks.ReduceLROnPlateau(
+    monitor='val_loss',
     factor=0.5,
     patience=5
 )
@@ -174,6 +180,6 @@ history_df.loc[:, ['loss', 'val_loss']].plot()
 print("Minimum Validation Loss: {:0.4f}".format(history_df['val_loss'].min()))
 
 y_val_pred_scaled = model.predict(X_val)
-y_val_pred = y_val_pred_scaled * y_std + y_mean
+y_val_pred = np.expm1(y_val_pred_scaled * y_std + y_mean)
 mae = mean_absolute_error(y_val, y_val_pred)
 print('MAE: {:.2f}'.format(mae))
