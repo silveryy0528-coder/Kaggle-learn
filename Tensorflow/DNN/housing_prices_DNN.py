@@ -1,7 +1,4 @@
 #%%
-import os
-import sys
-
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -16,6 +13,28 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import ParameterSampler
+
+
+random_seed = 42
+
+def build_model(layer_1st, layer_2nd, dropout):
+    optimizer = keras.optimizers.Adam(
+        learning_rate=3e-4
+    )
+    model = keras.Sequential([
+        layers.Input(shape=input_shape),
+        layers.Dense(layer_1st, activation='relu'),
+        layers.Dropout(dropout),
+        layers.Dense(layer_2nd, activation='relu'),
+        layers.Dropout(dropout),
+        layers.Dense(1)
+    ])
+    model.compile(
+        optimizer=optimizer,
+        loss='mae'
+    )
+    return model
 
 
 def make_mi_scores(train_df):
@@ -83,13 +102,14 @@ train_df = train_df.dropna(axis=0, subset=['SalePrice'])
 
 #%% Choose the top ten features
 mi_scores = make_mi_scores(train_df=train_df)
-feature_columns = mi_scores.index[:10]
-
+feature_columns = mi_scores.index[:20]
+feature_columns
+#%%
 X = train_df[feature_columns]
 y = train_df.SalePrice
 
 X_train, X_val, y_train, y_val = train_test_split(
-    X, y, train_size=0.7, random_state=42
+    X, y, train_size=0.7, random_state=random_seed
 )
 
 # log transform
@@ -153,33 +173,66 @@ reduce_lr = callbacks.ReduceLROnPlateau(
     factor=0.5,
     patience=5
 )
-optimizer = keras.optimizers.Adam(
-    learning_rate=3e-4
-)
-model = keras.Sequential([
-    layers.Dense(128, activation='relu', input_shape=input_shape),
-    layers.Dropout(0.1),
-    layers.Dense(128, activation='relu'),
-    layers.Dropout(0.1),
-    layers.Dense(1)
-])
-model.compile(
-    optimizer=optimizer,
-    loss='mae'
-)
+params_dist = {
+    'layer_1st': [32, 64, 128],
+    'layer_2nd': [32, 64, 128],
+    'dropout': [0.0, 0.05, 0.1]
+}
+
+best_model = None
+best_params = None
+best_mae = float('inf')
+for params in ParameterSampler(params_dist, n_iter=20, random_state=random_seed):
+    model = build_model(**params)
+
+    history = model.fit(
+        X_train, y_train_scaled,
+        validation_data=(X_val, y_val_scaled),
+        batch_size=32,
+        epochs=500,
+        callbacks=[early_stopping, reduce_lr],
+        verbose=False
+    )
+    history_df = pd.DataFrame(history.history)
+    history_df.loc[:, ['loss', 'val_loss']].plot()
+    print("Minimum Validation Loss: {:0.4f}".format(history_df['val_loss'].min()))
+
+
+    y_val_pred_scaled = model.predict(X_val)
+    y_val_pred = np.expm1(y_val_pred_scaled * y_std + y_mean)
+    mae = mean_absolute_error(y_val, y_val_pred)
+    if mae < best_mae:
+        best_mae = mae
+        best_params = params
+
+print(f'Best params: {best_params}')
+print(f'Best MAE: {best_mae}')
+
+#%% Retrain using full data
+model = build_model(**best_params)
+X = preprocessor.fit_transform(X)
+y_log = np.log1p(y)
+mean, std = y_log.mean(), y_log.std()
+y_log_scaled = (y_log - mean) / std
+
 history = model.fit(
-    X_train, y_train_scaled,
-    validation_data=(X_val, y_val_scaled),
+    X, y_log_scaled,
+    validation_split=0.1,
     batch_size=32,
     epochs=500,
     callbacks=[early_stopping, reduce_lr],
-    verbose=True
+    verbose=False
 )
 history_df = pd.DataFrame(history.history)
 history_df.loc[:, ['loss', 'val_loss']].plot()
 print("Minimum Validation Loss: {:0.4f}".format(history_df['val_loss'].min()))
 
-y_val_pred_scaled = model.predict(X_val)
-y_val_pred = np.expm1(y_val_pred_scaled * y_std + y_mean)
-mae = mean_absolute_error(y_val, y_val_pred)
-print('MAE: {:.2f}'.format(mae))
+X_test = test_df[feature_columns]
+X_test = preprocessor.transform(X_test)
+test_preds = model.predict(X_test)
+test_preds = np.expm1(test_preds * std + mean)
+data = {'Id': test_df.Id, 'SalePrice': test_preds[:, 0]}
+df_to_save = pd.DataFrame(data)
+outfile = './data/housing_prices_prediction_NN.csv'
+print(f'Saving predictions to {outfile}')
+df_to_save.to_csv(outfile, sep=',', index=False)
