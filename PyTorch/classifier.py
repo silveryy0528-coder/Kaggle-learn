@@ -78,18 +78,26 @@ class Convnet(nn.Module):
         self.dropout = nn.Dropout(0.2)
         self.fc2 = nn.Linear(in_features=fc_channels, out_features=2)
 
-    def forward(self, x):
+    def forward(self, x, return_features=False):
         # BN before ReLU; it normalizes the output of conv layer so the ReLU sees
         # zero-centered data -> helps training converges faster
-        x = self.pool(self.relu(self.bn1(self.conv1(x))))
-        x = self.pool(self.relu(self.bn2(self.conv2(x))))
-        x = self.pool(self.relu(self.bn3(self.conv3(x))))
+        x1 = self.relu(self.bn1(self.conv1(x)))
+        x = self.pool(x1)
+
+        x2 = self.relu(self.bn2(self.conv2(x)))
+        x = self.pool(x2)
+
+        x3 = self.relu(self.bn3(self.conv3(x)))
+        x = self.pool(x3)
 
         x = torch.flatten(x, 1)
         x = self.dropout(self.relu(self.bn_fc1(self.fc1(x))))
-        x = self.fc2(x)
+        out = self.fc2(x)
 
-        return x
+        if return_features:
+            return out, x1, x2, x3
+
+        return out
 
 
 mean = [0.485,0.456,0.406]
@@ -99,6 +107,7 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=mean, std=std)
 ])
+
 
 #%% Prepare data
 data_folder = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\PyTorch\data\animals'
@@ -148,7 +157,6 @@ if show_images:
 
 #%% Training and validation
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Training will be done on {device}.')
 
 model = Convnet(conv_channels=[32, 64, 128], fc_channels=6)
 model = model.to(device)
@@ -247,13 +255,15 @@ for epoch in range(num_epochs):
     else:
         counter += 1
         if counter >= patience:
-            print(f"Early stopping at epoch {epoch+1}")
-            model.load_state_dict(torch.load("best_model.pth"))  # restore best
+            print(f"Early stopping at epoch {epoch+1}, "
+                  f"loading best model with val loss {best_val_loss:.4f}")
+            model.load_state_dict(torch.load("best_model.pth"))
             break
 
 
 #%% Plotting results
 '''
+Visualise training and validation loss/accuracy curves to check for over-/underfitting.
 Interpret loss values:
     1. Perfect prediction → loss ≈ 0
     2. Random guess for 2 classes → loss ≈ 0.69 (since -log(0.5) ≈ 0.693)
@@ -274,4 +284,54 @@ plt.plot(x, train_accs, label='training accuracy')
 plt.plot(x, val_accs, label='val accuracy')
 plt.xlabel('epochs')
 plt.legend()
+plt.show()
+
+#%%
+'''
+Visualise learned features to check if the model is learning meaningful representations.
+Hireacrhical feature learning in CNNs:
+Edges -> Corners / Textures -> Object parts -> Objects
+
+Layer 1:
+    Edge detectors, color contrast, simple shapes
+Layer 2:
+    More complex patterns, textures, corners, combinations of edges
+Layer 3:
+    Large regions activated, parts of objects
+    (three 3x3 kernels can reach a receptive field of 7x7)
+'''
+model.eval()
+images, labels = next(iter(val_loader))
+
+img_idx = 0
+img = images[img_idx].unsqueeze(0).to(device)
+
+with torch.no_grad():
+    out, x1, x2, x3 = model(img, return_features=True)
+
+feature_maps = x3.cpu().squeeze(0)
+num_maps = feature_maps.shape[0]
+
+plt.figure(figsize=(12, 8))
+for i in range(min(num_maps, 16)):
+    plt.subplot(4, 4, i+1)
+    plt.imshow(feature_maps[i], cmap='viridis')
+    plt.axis('off')
+
+plt.suptitle('Feature maps from the convolutional layers')
+plt.tight_layout()
+plt.show()
+
+def imshow(img):
+    img = img.cpu().numpy().transpose((1, 2, 0))
+    img = std * img + mean
+    img = np.clip(img, 0, 1)
+    plt.figure(figsize=(4, 4))
+    plt.imshow(img)
+    plt.axis("off")
+    plt.draw()
+
+plt.figure(figsize=(4, 4))
+imshow(images[img_idx])
+plt.title(f"Original image: {dataset.classes[labels[img_idx]]}")
 plt.show()
