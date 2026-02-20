@@ -17,7 +17,8 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 from torchvision import datasets, transforms
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import DataLoader
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 
 
 # Set Matplotlib defaults
@@ -34,7 +35,7 @@ manual_seed = 42
 batch_size = 16
 show_images = True
 learning_rate = 1e-3
-num_epochs = 20
+num_epochs = 30
 
 class Convnet(nn.Module):
     def __init__(self, conv_channels=[32, 64, 128], fc_channels=6):
@@ -102,24 +103,42 @@ class Convnet(nn.Module):
 
 mean = [0.485,0.456,0.406]
 std = [0.229,0.224,0.225]
-transform = transforms.Compose([
+
+# Online data augmentation to increase data diversity and prevent overfitting.
+# The transformations are applied randomly during training, so the model sees a different
+# version of the same image in each epoch.
+transform_train = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.RandomResizedCrop((224, 224), scale=(0.8, 1.0)), # prevents over-reliance on object position
+    transforms.RandomHorizontalFlip(p=0.5),
+    transforms.RandomRotation(degrees=5),
+    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.02),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=mean, std=std)
+])
+
+transform_val = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
     transforms.Normalize(mean=mean, std=std)
 ])
 
-
 #%% Prepare data
 data_folder = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\PyTorch\data\animals'
-dataset = datasets.ImageFolder(data_folder, transform=transform)
 
-train_size = int((1 - train_test_split) * len(dataset))
-val_size = len(dataset) - train_size
-train_dataset, val_dataset = random_split(
-    dataset=dataset,
-    lengths=[train_size, val_size],
-    generator=torch.Generator().manual_seed(manual_seed)
-)
+# ImageFolder only stores file paths and labels, and applies transformations on-the-fly
+# when loading images. This is memory efficient and allows for data augmentation.
+train_dataset = datasets.ImageFolder(data_folder, transform=transform_train)
+val_dataset = datasets.ImageFolder(data_folder, transform=transform_val)
+class_names = train_dataset.classes
+
+train_size = int((1 - train_test_split) * len(train_dataset))
+indices = torch.randperm(len(train_dataset))
+train_indices = indices[:train_size]
+val_indices = indices[train_size:]
+
+train_dataset = torch.utils.data.Subset(train_dataset, train_indices)
+val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
 
 train_loader = DataLoader(
     train_dataset,
@@ -131,11 +150,10 @@ val_loader = DataLoader(
     batch_size=batch_size,
     shuffle=False
 )
-print(f'{len(train_dataset)} training images belonging to {len(dataset.classes)} classes')
-print(f'{len(val_dataset)} validation images belonging to {len(dataset.classes)} classes')
+print(f'{len(train_dataset)} training images belonging to {len(class_names)} classes')
+print(f'{len(val_dataset)} validation images belonging to {len(class_names)} classes')
 
 if show_images:
-    class_names = dataset.classes
     images, labels = next(iter(train_loader))
 
     plt.figure(figsize=(10, 6))
@@ -212,7 +230,7 @@ for epoch in range(num_epochs):
     train_acc = running_corrects / total
 
     # --- validation loop ---
-    model.eval()
+    model.eval() # turn off dropout & use running batchnorm stats
     val_loss = 0.0
     val_corrects = 0
     val_total = 0
@@ -300,38 +318,88 @@ Layer 3:
     Large regions activated, parts of objects
     (three 3x3 kernels can reach a receptive field of 7x7)
 '''
-model.eval()
-images, labels = next(iter(val_loader))
+if show_images:
+    model.eval()
 
-img_idx = 0
-img = images[img_idx].unsqueeze(0).to(device)
+    img_idx = 5
+    map_idx = 3
 
-with torch.no_grad():
-    out, x1, x2, x3 = model(img, return_features=True)
+    images, labels = next(iter(val_loader))
+    img = images[img_idx].unsqueeze(0).to(device)
 
-feature_maps = x3.cpu().squeeze(0)
-num_maps = feature_maps.shape[0]
+    with torch.no_grad():
+        outputs = model(img, return_features=True)
 
-plt.figure(figsize=(12, 8))
-for i in range(min(num_maps, 16)):
-    plt.subplot(4, 4, i+1)
-    plt.imshow(feature_maps[i], cmap='viridis')
-    plt.axis('off')
+    feature_maps = outputs[map_idx].cpu().squeeze(0)
+    num_maps = feature_maps.shape[0]
 
-plt.suptitle('Feature maps from the convolutional layers')
-plt.tight_layout()
-plt.show()
-
-def imshow(img):
-    img = img.cpu().numpy().transpose((1, 2, 0))
+    img = images[img_idx].cpu().numpy().transpose((1, 2, 0))
     img = std * img + mean
     img = np.clip(img, 0, 1)
-    plt.figure(figsize=(4, 4))
-    plt.imshow(img)
-    plt.axis("off")
-    plt.draw()
 
-plt.figure(figsize=(4, 4))
-imshow(images[img_idx])
-plt.title(f"Original image: {dataset.classes[labels[img_idx]]}")
+    plt.figure(figsize=(12, 8))
+    plt.subplot(4, 4, 1)
+    plt.imshow(img)
+    plt.axis('off')
+
+    for i in range(min(num_maps, 15)):
+        plt.subplot(4, 4, i+2)
+        plt.imshow(feature_maps[i], cmap='viridis')
+        plt.axis('off')
+
+    plt.suptitle(f'Feature maps of image {img_idx} from convolutional layer {map_idx}')
+    plt.tight_layout()
+    plt.show()
+
+#%% Confusion matrix and classification report
+model.eval()
+
+all_preds = []
+all_labels = []
+all_images = []
+
+with torch.no_grad():
+    for images, labels in val_loader:
+        images = images.to(device)
+        labels = labels.to(device)
+
+        outputs = model(images)
+        preds = torch.argmax(outputs, dim=1)
+
+        all_preds.append(preds.cpu())
+        all_labels.append(labels.cpu())
+        all_images.append(images.cpu())
+
+all_preds = torch.cat(all_preds)
+all_labels = torch.cat(all_labels)
+all_images = torch.cat(all_images)
+
+cm = confusion_matrix(all_labels, all_preds)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+disp.plot(cmap='Blues')
+plt.title('Confusion Matrix')
 plt.show()
+
+report = classification_report(all_labels, all_preds, target_names=class_names)
+print("Classification Report:")
+print(report)
+
+misclassified_indices = torch.where(all_preds != all_labels)[0]
+if show_images and len(misclassified_indices) > 0:
+    plt.figure(figsize=(8, 4))
+
+    for i, idx in enumerate(misclassified_indices):
+        if i >= 4:
+            break
+        img = all_images[idx].numpy().transpose((1, 2, 0))
+        img = std * img + mean
+        img = np.clip(img, 0, 1)
+
+        plt.subplot(1, 4, i+1)
+        plt.imshow(img)
+        plt.title(f"True: {class_names[all_labels[idx]]}\nPred: {class_names[all_preds[idx]]}")
+        plt.axis('off')
+
+    plt.suptitle('Misclassified Images')
+    plt.tight_layout()
+    plt.show()
