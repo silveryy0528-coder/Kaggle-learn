@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 import torch
 import torch.optim as optim
@@ -23,9 +24,9 @@ import utils
 manual_seed = 42
 train_val_split = 0.3
 batch_size = 32
-num_epochs = 20
+num_epochs = 30
 show_images = True
-learning_rate = 1e-5
+learning_rate = 5e-6
 
 mean = [0.485,0.456,0.406]
 std = [0.229,0.224,0.225]
@@ -115,15 +116,23 @@ model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 for param in model.parameters():
     param.requires_grad = False
 
-# Only fine-tune the last block (layer4) and the fully connected layer
+# Only fine-tune last layers
 num_features = model.fc.in_features
 model.fc = nn.Linear(num_features, num_classes)
 for param in model.layer4.parameters():
     param.requires_grad = True
 
+for param in model.layer3.parameters():
+    param.requires_grad = True
+
 model.to(device)
 
-criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+class_counts = train_df['label_idx'].value_counts().sort_index()
+weights = 1.0 / class_counts
+weights = weights / weights.sum()
+weights_tensor = torch.tensor(weights.values, dtype=torch.float).to(device)
+
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1, weight=weights_tensor)
 optimizer = torch.optim.Adam(
     filter(lambda p: p.requires_grad, model.parameters()),
     lr=learning_rate
@@ -260,8 +269,23 @@ all_preds = torch.cat(all_preds)
 all_labels = torch.cat(all_labels)
 all_images = torch.cat(all_images)
 
+#%%
 cm = confusion_matrix(all_labels, all_preds)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
-disp.plot(cmap='Blues')
-plt.title('Confusion Matrix')
-plt.show()
+cm_no_diag = cm.copy()
+np.fill_diagonal(cm_no_diag, 0)
+
+# Get top 10 confusion pairs
+confused_pairs = np.dstack(np.unravel_index(
+    np.argsort(cm_no_diag.ravel())[::-1],
+    cm_no_diag.shape
+))[0]
+
+top_10 = confused_pairs[:10]
+idx_to_class = {v:k for k,v in class_to_idx.items()}
+for i, j in top_10:
+    print(f"True: {idx_to_class[i]} → Predicted: {idx_to_class[j]}")
+
+
+report = classification_report(all_labels, all_preds, target_names=class_names)
+print("Classification Report:")
+print(report)
