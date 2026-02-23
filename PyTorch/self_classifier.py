@@ -9,6 +9,7 @@
     Forward pass -> compute loss -> backward -> optimizer step
 
 '''
+import sys
 import warnings
 import matplotlib.pyplot as plt
 
@@ -20,6 +21,8 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 
+sys.path.append(r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\PyTorch')
+import utils
 
 # Set Matplotlib defaults
 plt.rc('figure', autolayout=True)
@@ -154,24 +157,7 @@ print(f'{len(train_dataset)} training images belonging to {len(class_names)} cla
 print(f'{len(val_dataset)} validation images belonging to {len(class_names)} classes')
 
 if show_images:
-    images, labels = next(iter(train_loader))
-
-    plt.figure(figsize=(10, 6))
-
-    for i in range(8):
-        img = (
-            images[i] * torch.tensor(std).view(3, 1, 1)
-            + torch.tensor(mean).view(3, 1, 1)
-        )
-        img = torch.clamp(img, 0, 1)
-
-        plt.subplot(2, 4, i+1)
-        plt.imshow(img.permute(1, 2, 0))
-        plt.title(class_names[labels[i]])
-        plt.axis("off")
-
-    plt.tight_layout()
-    plt.show()
+    utils.visualize_samples(train_loader, class_names, mean, std)
 
 #%% Training and validation
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
