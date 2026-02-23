@@ -82,14 +82,14 @@ class Convnet(nn.Module):
     def forward(self, x, return_features=False):
         # BN before ReLU; it normalizes the output of conv layer so the ReLU sees
         # zero-centered data -> helps training converges faster
-        x1 = self.relu(self.bn1(self.conv1(x)))
-        x = self.pool(x1)
+        x1 = self.bn1(self.conv1(x))
+        x = self.pool(self.relu(x1))
 
-        x2 = self.relu(self.bn2(self.conv2(x)))
-        x = self.pool(x2)
+        x2 = self.bn2(self.conv2(x))
+        x = self.pool(self.relu(x2))
 
-        x3 = self.relu(self.bn3(self.conv3(x)))
-        x = self.pool(x3)
+        x3 = self.bn3(self.conv3(x))
+        x = self.pool(self.relu(x3))
 
         x = torch.flatten(x, 1)
         x = self.dropout(self.relu(self.bn_fc1(self.fc1(x))))
@@ -109,7 +109,7 @@ std = [0.229,0.224,0.225]
 # version of the same image in each epoch.
 transform_train = transforms.Compose([
     transforms.Resize((256, 256)),
-    transforms.RandomResizedCrop((224, 224), scale=(0.8, 1.0)), # prevents over-reliance on object position
+    transforms.RandomResizedCrop((224, 224), scale=(0.7, 1.0)), # prevents over-reliance on object position
     transforms.RandomHorizontalFlip(p=0.5),
     transforms.RandomRotation(degrees=5),
     transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.02),
@@ -179,7 +179,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = Convnet(conv_channels=[32, 64, 128], fc_channels=6)
 model = model.to(device)
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(
     optimizer,
@@ -403,3 +403,54 @@ if show_images and len(misclassified_indices) > 0:
     plt.suptitle('Misclassified Images')
     plt.tight_layout()
     plt.show()
+
+
+#%%
+idx = misclassified_indices[1].item()
+
+model.eval()
+
+output, x1, x2, x3 = model(all_images[idx].unsqueeze(0).to(device), return_features=True)
+x3.retain_grad()
+
+pred_class = output.argmax(dim=1)
+title = (
+    "PREDICTED CLASS:", class_names[pred_class],
+    "CONFIDENCE:", torch.softmax(output, dim=1)[0, pred_class].item())
+
+model.zero_grad()
+score_pred_class = output[0, pred_class.item()]
+score_pred_class.backward(retain_graph=True)
+
+weights_pred_class = x3.grad.mean(dim=[2, 3], keepdim=True)
+cam_pred_class = torch.relu((weights_pred_class * x3).sum(dim=1))
+
+model.zero_grad()
+x3.grad.zero_()
+
+true_label = all_labels[idx].to(device=device)
+
+score_true_class = output[0, true_label.item()]
+score_true_class.backward()
+
+weights_true_class = x3.grad.mean(dim=[2, 3], keepdim=True)
+cam_true_class = torch.relu((weights_true_class * x3).sum(dim=1))
+
+cam_pred_class = nn.functional.interpolate(
+    cam_pred_class.unsqueeze(1),   # add channel dim
+    size=(224,224),
+    mode='bilinear',
+    align_corners=False
+).squeeze()
+
+plt.figure(figsize=(8, 4))
+plt.subplot(1, 2, 1)
+plt.imshow(np.clip(all_images[idx].numpy().transpose((1, 2, 0)) * std + mean, 0, 1))
+plt.axis('off')
+plt.subplot(1, 2, 2)
+plt.imshow(cam_pred_class.cpu().detach().squeeze(), cmap='Reds')
+plt.axis('off')
+plt.colorbar()
+plt.suptitle(title)
+plt.tight_layout()
+plt.show()
