@@ -12,7 +12,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torchvision.models as models
 from torchvision import transforms
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 
@@ -28,9 +28,7 @@ num_epochs = 30
 show_images = True
 learning_rate = 5e-6
 
-mean = [0.485,0.456,0.406]
-std = [0.229,0.224,0.225]
-
+mean, std = utils.retrieve_imagenet_mean_std()
 transform_train = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.RandomHorizontalFlip(p=0.5),
@@ -47,32 +45,6 @@ transform_val = transforms.Compose([
 ])
 
 
-class ButterflyDataset(Dataset):
-    def __init__(self, dataframe, root_dir, transform=None):
-        self.data = dataframe.reset_index(drop=True)
-        self.root_dir = root_dir
-        self.transform = transform
-
-        self.classes = sorted(self.data['label'].unique())
-        self.class_to_idx = {
-            cls_name: idx for idx, cls_name in enumerate(self.classes)}
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        img_name = self.data.iloc[idx]['filename']
-        label = self.data.iloc[idx]['label_idx']
-
-        img_path = os.path.join(self.root_dir, img_name)
-        image = Image.open(img_path).convert('RGB')
-
-        if self.transform:
-            image = self.transform(image)
-
-        return image, label
-
-
 #%% Prepare dataset and dataloaders
 root_dir = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\PyTorch\data\butterflies\train'
 csv_file = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\PyTorch\data\butterflies\Training_set.csv"
@@ -80,9 +52,8 @@ csv_file = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\PyTorch\data\butterf
 df = pd.read_csv(csv_file)
 
 # Encode labels
-class_names = sorted(df['label'].unique())
+class_names, class_to_idx = utils.retrieve_class_names(df)
 num_classes = len(class_names)
-class_to_idx = {cls: idx for idx, cls in enumerate(class_names)}
 df['label_idx'] = df['label'].map(class_to_idx)
 
 train_df, val_df = train_test_split(
@@ -92,8 +63,8 @@ train_df, val_df = train_test_split(
     stratify=df['label_idx']    # very class keeps the same proportion
 )
 
-train_dataset = ButterflyDataset(train_df, root_dir, transform=transform_train)
-val_dataset = ButterflyDataset(val_df, root_dir, transform=transform_val)
+train_dataset = utils.ButterflyDataset(train_df, root_dir, transform=transform_train)
+val_dataset = utils.ButterflyDataset(val_df, root_dir, transform=transform_val)
 
 train_loader = DataLoader(
     train_dataset,
@@ -112,26 +83,10 @@ if show_images:
 #%%
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-for param in model.parameters():
-    param.requires_grad = False
-
-# Only fine-tune last layers
-num_features = model.fc.in_features
-model.fc = nn.Linear(num_features, num_classes)
-for param in model.layer4.parameters():
-    param.requires_grad = True
-
-for param in model.layer3.parameters():
-    param.requires_grad = True
-
+model = utils.retrieve_resnet_model(num_classes)
 model.to(device)
 
-class_counts = train_df['label_idx'].value_counts().sort_index()
-weights = 1.0 / class_counts
-weights = weights / weights.sum()
-weights_tensor = torch.tensor(weights.values, dtype=torch.float).to(device)
-
+weights_tensor = utils.retrieve_class_weights(train_df).to(device)
 criterion = nn.CrossEntropyLoss(label_smoothing=0.1, weight=weights_tensor)
 optimizer = torch.optim.Adam(
     filter(lambda p: p.requires_grad, model.parameters()),
@@ -220,13 +175,17 @@ for epoch in range(num_epochs):
     if val_loss < best_val_loss:
         best_val_loss = val_loss
         counter = 0
-        torch.save(model.state_dict(), "best_model.pth")
+        torch.save({
+            "model_state_dict": model.state_dict(),
+            "class_to_idx": class_to_idx,
+        }, "best_model_val_split.pth")
     else:
         counter += 1
         if counter >= patience:
             print(f"Early stopping at epoch {epoch+1}, "
                   f"loading best model with val loss {best_val_loss:.4f}")
-            model.load_state_dict(torch.load("best_model.pth"))
+            model.load_state_dict(
+                torch.load("best_model_val_split.pth")['model_state_dict'])
             break
 
 
