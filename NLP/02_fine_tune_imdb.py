@@ -22,6 +22,14 @@ from transformers import (
 5. Use native PyTorch training pipeline
 '''
 
+num_epochs = 3
+lr = 2e-5
+max_length = 256
+batch_size = 16
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def read_file(path_label):
     path, label = path_label
     return path.read_text(encoding='utf-8'), label
@@ -62,34 +70,29 @@ class IMDbDataset(Dataset):
 #%%
 model_name = 'distilbert-base-uncased'
 root_dir = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\data\aclImdb'
-train_texts, train_labels = read_imdb_split(os.path.join(root_dir, 'train'))
 
-#%%
+train_texts, train_labels = read_imdb_split(os.path.join(root_dir, 'train'))
 train_texts, val_texts, train_labels, val_labels = train_test_split(
     train_texts, train_labels, test_size=0.2, random_state=42
 )
 
+#%%
 tokenizer = DistilBertTokenizerFast.from_pretrained(model_name)
 
-train_encodings = tokenizer(train_texts, padding=True, truncation=True)
-val_encodings = tokenizer(val_texts, padding=True, truncation=True)
+train_encodings = tokenizer(train_texts, padding=True, truncation=True, max_length=max_length)
+val_encodings = tokenizer(val_texts, padding=True, truncation=True, max_length=max_length)
 
 train_dataset = IMDbDataset(train_encodings, train_labels)
 val_dataset = IMDbDataset(val_encodings, val_labels)
-
-batch_size = 16
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 #%%
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-num_epochs = 5
 model = DistilBertForSequenceClassification.from_pretrained(model_name)
 model.to(device)
 
-optimizer = AdamW(model.parameters(), lr=5e-5)
+optimizer = AdamW(model.parameters(), lr=lr)
 
 train_losses = np.full(num_epochs, np.nan)
 train_accs = np.full(num_epochs, np.nan)
@@ -163,21 +166,6 @@ tokenizer.save_pretrained(output_folder)
 model.save_pretrained(output_folder)
 
 #%%
-x = range(1, num_epochs + 1)
-fig = plt.figure()
-fig.add_subplot(2, 1, 1)
-plt.plot(x, train_losses, label='training loss')
-plt.plot(x, val_losses, label='val loss')
-plt.xlabel('epochs')
-plt.legend()
-fig.add_subplot(2, 1, 2)
-plt.plot(x, train_accs, label='training accuracy')
-plt.plot(x, val_accs, label='val accuracy')
-plt.xlabel('epochs')
-plt.legend()
-plt.show()
-
-#%%
 model_folder = 'outputs'
 tokenizer = DistilBertTokenizerFast.from_pretrained(model_folder)
 model = DistilBertForSequenceClassification.from_pretrained(model_folder)
@@ -188,8 +176,6 @@ test_encodings = tokenizer(test_texts, padding=True, truncation=True)
 test_dataset = IMDbDataset(test_encodings, test_labels)
 
 #%%
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 model.to(device)
 model.eval()
@@ -215,3 +201,18 @@ with torch.no_grad():
     test_loss /= test_total
     test_acc = test_corrects / test_total
     print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}, ")
+
+#%%
+x = range(1, num_epochs + 1)
+fig = plt.figure()
+fig.add_subplot(2, 1, 1)
+plt.plot(x, train_losses, label='training loss')
+plt.plot(x, val_losses, label='val loss')
+plt.xlabel('epochs')
+plt.legend()
+fig.add_subplot(2, 1, 2)
+plt.plot(x, train_accs, label='training accuracy')
+plt.plot(x, val_accs, label='val accuracy')
+plt.xlabel('epochs')
+plt.legend()
+plt.show()
