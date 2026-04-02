@@ -381,7 +381,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer, models
 
 word_embedding_model = models.Transformer('sentence-transformers/all-MiniLM-L6-v2')
-sentences = ['I like dogs.', 'I don\'t like dogs.', 'I hate dogs.']
+sentences = ['I like dogs.', 'I don\'t like dogs.']
 
 pooling_model = models.Pooling(
     word_embedding_model.get_word_embedding_dimension(),
@@ -398,3 +398,12 @@ pooling_model = models.Pooling(
     pooling_mode_max_tokens=False)
 
 model_cls = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+
+embeddings_mean = model_mean.encode(sentences)
+embeddings_cls = model_cls.encode(sentences)
+
+similarity_mean = model_mean.similarity(embeddings_mean, embeddings_mean)
+similarity_cls = model_cls.similarity(embeddings_cls, embeddings_cls)
+
+print("Similarity with mean pooling:\n", similarity_mean.numpy())
+print("Similarity with CLS pooling:\n", similarity_cls.numpy())
