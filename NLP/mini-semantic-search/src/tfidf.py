@@ -16,7 +16,7 @@ def main(query, documents, top_k=3):
     documents_df = pd.json_normalize(documents)
     documents_df = documents_df.rename(columns={"metadata.topic": "topic"})
 
-    vectorizer = TfidfVectorizer(stop_words='english')
+    vectorizer = TfidfVectorizer(stop_words='english', max_features=200)
     doc_vectors = vectorizer.fit_transform(documents_df['text'])
 
     query_vector = vectorizer.transform([query])
@@ -24,21 +24,3 @@ def main(query, documents, top_k=3):
     top_k_indices = np.argsort(similarity_scores)[-top_k:][::-1]
 
     return top_k_indices, similarity_scores[top_k_indices]
-
-
-root_dir = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\semantic-search'
-
-# Load documents
-documents = load_data.load_documents(root_dir)
-queries = load_data.load_queries(root_dir)
-
-for i, query in enumerate(queries):
-    top_k_indices, similarity_scores = main(query['query'], documents)
-    print(f"\nQuery {i + 1}: {query['query']} - Hand-picked IDs: {query['relevant_ids']}")
-    print("-" * 20)
-    # print(f"\nQuery: {query['query']} - Hand-picked IDs: {query['relevant_ids']}")
-    # print("-" * 20)
-    # for idx in top_k_indices:
-    #     print(f"Doc {idx + 1}: {documents[idx]['text']}",
-    #           f"- Topic: {documents[idx]['metadata']['topic']}",
-    #           f"- Similarity: {similarity_scores[i]:.2f}")
