@@ -3,11 +3,8 @@ import sys
 import importlib
 sys.path.append(r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\semantic-search\src')
 
-import pandas as pd
-import numpy as np
-
-import load_data
-importlib.reload(load_data)
+import utils
+importlib.reload(utils)
 
 from transformers import logging
 logging.set_verbosity_error()
@@ -16,12 +13,19 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-def main(query, documents, top_k=3):
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    doc_embeddings = model.encode([doc['text'] for doc in documents])
-    query_embedding = model.encode([query])
+model_name = 'all-MiniLM-L6-v2'
 
-    similarity_scores = cosine_similarity(query_embedding, doc_embeddings).flatten()
-    top_k_indices = np.argsort(similarity_scores)[-top_k:][::-1]
+
+def vectorize(documents):
+    embedder = SentenceTransformer(model_name)
+    doc_embeddings = embedder.encode([doc['text'] for doc in documents])
+
+    return embedder, doc_embeddings
+
+
+def search(query, embedder, doc_embeddings, top_k=3):
+    query_embedding = embedder.encode([query])
+    top_k_indices, similarity_scores = utils.find_top_k_results(
+        query_embedding, doc_embeddings, top_k)
 
     return top_k_indices, similarity_scores[top_k_indices]
