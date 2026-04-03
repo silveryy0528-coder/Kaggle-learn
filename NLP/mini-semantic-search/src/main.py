@@ -6,7 +6,7 @@ sys.path.append(r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\mini-semant
 
 import utils
 importlib.reload(utils)
-import embedding as main
+import tfidf as main
 
 
 if __name__ == "__main__":
