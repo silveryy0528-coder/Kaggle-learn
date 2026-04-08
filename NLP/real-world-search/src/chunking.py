@@ -31,7 +31,7 @@ def sample_docs_by_label(ds, num_samples_per_label=2000):
 data_folder = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\real-world-search\data'
 ds = load_from_disk(os.path.join(data_folder, "raw/ag_news"))
 label_names = ds['train'].features['label'].names
-sampled_docs = sample_docs_by_label(ds['train'], num_samples_per_label=2000)
+sampled_docs = sample_docs_by_label(ds['train'], num_samples_per_label=5000)
 
 chunk_id = 0
 chunk_list = []
