@@ -2,6 +2,7 @@
 #%%
 import openai
 openai.api_key = 'YOUR_KEY'
+
 import pymupdf
 import re
 import faiss
