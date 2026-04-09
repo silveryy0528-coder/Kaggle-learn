@@ -62,7 +62,7 @@ query_vectors = embedder.encode(
 )
 
 #%%
-index_name = 'faiss_ivf'
+index_name = 'faiss_ivfpq'
 faiss_index = load_faiss(index_folder, index_name=f'{index_name}.index')
 if (
     index_name == 'faiss_ivf'
