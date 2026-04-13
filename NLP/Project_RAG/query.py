@@ -23,8 +23,12 @@ def answer_question(folder, question, embedder, client, k=3):
     faiss_index, chunks = load_artifacts(folder)
 
     top_chunks = retrieve_top_k(question, chunks, embedder, faiss_index, k)
+    for c in top_chunks:
+        print(f'[Source: {c["source"]}, Page: {c["page"]}]')
+        print(c["text"])
+        print('-' * 50)
 
-    context = "\n\n".join(top_chunks)
+    context = "\n\n".join(c['text'] for c in top_chunks)
 
     prompt = build_rag_prompt(question, context)
 
@@ -36,7 +40,7 @@ def answer_question(folder, question, embedder, client, k=3):
 def answer_question_with_eval(folder, question, embedder, client, k=3):
     answer, top_chunks = answer_question(folder, question, embedder, client, k)
 
-    context = "\n\n".join(top_chunks)
+    context = "\n\n".join([c['text'] for c in top_chunks])
 
     score = evaluate_answer_llm(client, question, answer, context)
 

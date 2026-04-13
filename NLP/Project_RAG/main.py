@@ -1,4 +1,4 @@
-from src.query import answer_question_with_eval
+from query import answer_question_with_eval
 from src.embedding import load_embedder
 from src.llm import load_openai_client
 
@@ -7,7 +7,7 @@ def main():
     artifacts_folder = r'.\data'
 
     embedder = load_embedder()
-    client = load_openai_client('YOUR_API_KEY')
+    client = load_openai_client('KEY')
 
     question = input('Ask your question: ')
 

@@ -40,5 +40,5 @@ with open(chunk_file, 'wb') as f:
 embedding_file = os.path.join(data_folder.replace('raw', 'index'), 'embeddings.npy')
 np.save(embedding_file, embeddings)
 
-index_file = os.path.join(data_folder.replace('raw', 'index'))
-faiss.write_index(index, index_file, 'faiss.index')
+index_file = os.path.join(data_folder.replace('raw', 'index'), 'faiss.index')
+faiss.write_index(index, index_file)
