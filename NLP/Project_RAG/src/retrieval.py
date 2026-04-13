@@ -62,8 +62,22 @@ def build_faiss_index(embeddings, settings):
 
 
 def retrieve_top_k(question, chunks, embedder, faiss_index, k=3):
+    # Embed query
     query_vec = embed_text(embedder, texts=[question])
+
+    # Search
     scores, indices = faiss_index.search(query_vec, k)
-    top_chunks = [chunks[i] for i in indices[0]]
-    return top_chunks
+
+    results = []
+    for score, idx in zip(scores[0], indices[0]):
+        chunk = chunks[idx]
+        result = {
+            'id': chunk['id'],
+            'text': chunk['text'],
+            "doc_id": chunk.get("doc_id", "UNKNOWN"),
+            "score": float(score),
+            'page': chunk['page']
+        }
+        results.append(result)
+    return results
 

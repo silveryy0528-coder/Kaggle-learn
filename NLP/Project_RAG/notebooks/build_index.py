@@ -20,6 +20,7 @@ chunks = chunk_text_with_metadata(
     raw_text,
     source=os.path.basename(pdf_file),
     settings=ChunkingSentencesConfig())
+print(chunks[0])
 
 #%%
 embedder = load_embedder()

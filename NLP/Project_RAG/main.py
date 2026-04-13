@@ -7,7 +7,7 @@ def main():
     artifacts_folder = r'.\data'
 
     embedder = load_embedder()
-    client = load_openai_client('KEY')
+    client = load_openai_client('Key')
 
     question = input('Ask your question: ')
 

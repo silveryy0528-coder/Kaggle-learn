@@ -24,7 +24,7 @@ def answer_question(folder, question, embedder, client, k=3):
 
     top_chunks = retrieve_top_k(question, chunks, embedder, faiss_index, k)
     for c in top_chunks:
-        print(f'[Source: {c["source"]}, Page: {c["page"]}]')
+        print(f'[Source: {c["doc_id"]}, Page: {c["page"]}]')
         print(c["text"])
         print('-' * 50)
 
