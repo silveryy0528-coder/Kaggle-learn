@@ -1,10 +1,10 @@
 #%%
 import sys
+import glob
 sys.path.insert(0, r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG')
-from src.chunking import chunk_text_with_metadata, ChunkingSentencesConfig
-from src.ingestion import read_pdf_file
+from src.ingestion import chunk_multiple_documents
 from src.embedding import embed_text, load_embedder
-from src.retrieval import build_faiss_index, FaissFlatConfig
+from src.retrieval import build_faiss_index, FaissIvfConfig
 import pickle
 import numpy as np
 import faiss
@@ -12,15 +12,11 @@ import os
 
 
 #%%
-pdf_file = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw\CV_YanGuo.pdf"
-data_folder = os.path.dirname(pdf_file)
+pdf_files = glob.glob(r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw\*.pdf')
+data_folder = os.path.dirname(pdf_files[0])
 
-raw_text = read_pdf_file(pdf_file)
-chunks = chunk_text_with_metadata(
-    raw_text,
-    source=os.path.basename(pdf_file),
-    settings=ChunkingSentencesConfig())
-print(chunks[0])
+chunks = chunk_multiple_documents(pdf_files)
+print(chunks[11])
 
 #%%
 embedder = load_embedder()
@@ -31,9 +27,10 @@ embeddings = embed_text(
     device='cuda')
 print(embeddings.shape)
 
-index = build_faiss_index(embeddings, settings=FaissFlatConfig())
+index = build_faiss_index(embeddings, settings=FaissIvfConfig())
 print(index.ntotal)
 
+#%%
 chunk_file = os.path.join(data_folder.replace('raw', 'processed'), 'chunks.pkl')
 with open(chunk_file, 'wb') as f:
     pickle.dump(chunks, f)

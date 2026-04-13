@@ -1,20 +1,18 @@
 #%%
 from dataclasses import dataclass
 import re
-import os
 import sys
 sys.path.insert(0, r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\src')
-import ingestion
 
 
 @dataclass
 class ChunkingConfig():
-    chunk_size: int = 400
+    chunk_size: int = 500
 
 
 @dataclass
 class ChunkingSentencesConfig(ChunkingConfig):
-    sentence_limit: int = 50
+    sentence_limit: int = 100
 
 
 def _split_text_to_sentences(text, limit=50):
@@ -65,26 +63,23 @@ def chunk_text(text, settings):
         return chunk_text_sentences(text, chunk_size, settings.sentence_limit)
 
 
-def chunk_text_with_metadata(text, source, settings):
-    raw_chunks = chunk_text(text, settings)
+def chunk_text_with_metadata(pages, doc_id, settings):
+    chunks_with_metadata = []
+    chunk_id = 0
 
-    chunks = []
-    for i, raw_chunk in enumerate(raw_chunks):
-        chunk = {
-            'id': i,
-            'text': raw_chunk['text'],
-            'doc_id': source,
-            'page': 1
-        }
-        chunks.append(chunk)
+    for page_data in pages:
+        text = page_data['text']
+        page_number = page_data['page']
+        raw_chunks = chunk_text(text, settings)
 
-    return chunks
+        for raw_chunk in raw_chunks:
+            chunk_with_metadata = {
+                'id': chunk_id,
+                'text': raw_chunk['text'],
+                'doc_id': doc_id,
+                'page': page_number
+            }
+            chunk_id += 1
+            chunks_with_metadata.append(chunk_with_metadata)
 
-
-#%%
-if __name__ == "__main__":
-    pdf_file = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw\CV_YanGuo.pdf"
-    source = os.path.basename(pdf_file)
-    text = ingestion.read_pdf_file(pdf_file)
-    chunks = chunk_text_with_metadata(text, source, ChunkingSentencesConfig())
-    print(chunks[-2])
+    return chunks_with_metadata

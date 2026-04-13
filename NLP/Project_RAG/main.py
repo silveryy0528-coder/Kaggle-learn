@@ -7,7 +7,7 @@ def main():
     artifacts_folder = r'.\data'
 
     embedder = load_embedder()
-    client = load_openai_client('Key')
+    client = load_openai_client('sk-proj-aa')
 
     question = input('Ask your question: ')
 
@@ -16,7 +16,7 @@ def main():
         question,
         embedder,
         client,
-        k=3
+        k=5
     )
 
     print("\nANSWER:\n", response)

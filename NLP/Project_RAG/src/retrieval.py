@@ -15,12 +15,12 @@ class FaissFlatConfig(FaissConfig):
 
 @dataclass
 class FaissIvfConfig(FaissConfig):
-    nlist: int = 50
+    nlist: int = 40
 
 
 @dataclass
 class FaissIvfpqConfig(FaissConfig):
-    nlist: int = 50
+    nlist: int = 40
     m: int = 8
     nbits: int = 8
 
