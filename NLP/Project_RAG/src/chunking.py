@@ -1,6 +1,10 @@
 #%%
 from dataclasses import dataclass
 import re
+import os
+import sys
+sys.path.insert(0, r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\src')
+import ingestion
 
 
 @dataclass
@@ -95,3 +99,29 @@ def chunk_text(text, settings):
         return chunk_text_overlap(text, chunk_size, settings.overlap)
     elif isinstance(settings, ChunkingSentencesConfig):
         return chunk_text_sentences(text, chunk_size, settings.sentence_limit)
+
+
+def chunk_text_with_metadata(text, source, settings):
+    raw_chunks = chunk_text(text, settings)
+
+    chunks = []
+    for i, raw_chunk in enumerate(raw_chunks):
+        chunk = {
+            'id': i,
+            'text': raw_chunk,
+            'source': source,
+            'page': 1
+        }
+        chunks.append(chunk)
+
+    return chunks
+
+
+#%%
+if __name__ == "__main__":
+    pdf_file = r"C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw\CV_YanGuo.pdf"
+    source = os.path.basename(pdf_file)
+    text = ingestion.read_pdf_file(pdf_file)
+
+    settings = ChunkingSentencesConfig()
+    chunks = chunk_text_with_metadata(text, source, settings)

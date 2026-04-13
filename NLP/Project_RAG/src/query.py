@@ -43,6 +43,5 @@ def answer_question_with_eval(folder, question, embedder, client, k=3):
     return {
         'question': question,
         'answer': answer,
-        'retrieved_chunks': top_chunks,
         'score': score
     }
