@@ -59,7 +59,7 @@ class RAGService:
         texts = [c['text'] for c in chunks]
         embeddings = embedding.embed_text(self.embedding_model, texts)
 
-        index = retrieval.build_faiss_index(embeddings, retrieval.FaissIvfConfig())
+        index = retrieval.build_faiss_index(embeddings, retrieval.FaissFlatConfig())
 
         with open(self.chunks_path, 'wb') as f:
             pickle.dump(chunks, f)
