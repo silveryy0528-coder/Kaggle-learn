@@ -1,6 +1,6 @@
 from query import answer_question_with_eval
-from src.embedding import load_embedder
-from src.llm import load_openai_client
+from core.embedding import load_embedder
+from core.llm import load_openai_client
 
 
 def main():
