@@ -3,10 +3,25 @@ import sys
 import glob
 import os
 sys.path.insert(0, r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG')
-from core.chunking import chunk_text_with_metadata, ChunkingSentencesConfig
+from core.chunking import (
+    chunk_text_with_metadata,
+    ChunkingSentenceConfig
+)
 import fitz
 import re
+from llama_index.core import Document
+from dataclasses import dataclass
 
+
+@dataclass
+class Margin:
+    top: int = 50
+    bottom: int = 50
+    left: int = 50
+    right: int = 50
+
+
+margin = Margin()
 
 def clean_text(text):
     text = text.replace("\xa0", " ")      # non-breaking space
@@ -24,58 +39,83 @@ def is_structure_page(text):
     return False
 
 
+BAD_SECTION_KEYWORDS = [
+    'propositions',
+    'acknowledgements',
+    'references',
+    'stellingen',
+    'samenvatting',
+    'copyright'
+]
+
+def is_bad_page(text):
+    text_low = text.lower()
+    return any(k in text_low for k in BAD_SECTION_KEYWORDS)
+
+
 def process_page(text_clean):
-    return text_clean if not is_structure_page(text_clean) else None
+    if is_structure_page(text_clean):
+        return None
+    elif is_bad_page(text_clean):
+        return None
+    return text_clean
 
 
 def read_pdf_file(pdf_file):
     doc = fitz.open(pdf_file)
-    pages = []
+    doc_id = os.path.basename(pdf_file)
 
+    documents = []
     for i, page in enumerate(doc):
-        text_raw = page.get_text("text")
-        text_clean = clean_text(text_raw)
-
-        cleaned = process_page(text_clean)
+        # 1. Filter out pages with bad structure or content
+        text = page.get_text("text")
+        cleaned = process_page(text)
         if cleaned is None:
             continue
 
-        pages.append({
-            "text_raw": text_raw,
-            "text_clean": text_clean,
-            "page": i + 1,
-        })
+        # 2. Apply margin filtering
+        rect = page.rect
+        content_rect = fitz.Rect(
+            rect.x0 + margin.left,
+            rect.y0 + margin.top,
+            rect.x1 - margin.right,
+            rect.y1 - margin.bottom
+        )
+        text = page.get_text("text", clip=content_rect)
+        text = clean_text(text)
 
-    return pages
+        document = Document(
+            text=text,
+            metadata={"page": i + 1, "doc_id": doc_id}
+        )
+        documents.append(document)
+
+    return documents
 
 
-def chunk_single_document(pdf_file, chunk_settings=ChunkingSentencesConfig()):
-    pages = read_pdf_file(pdf_file)
-    doc_id = os.path.basename(pdf_file)
-    return chunk_text_with_metadata(pages, doc_id, chunk_settings)
-
-
-def chunk_multiple_documents(pdf_files, chunk_settings=ChunkingSentencesConfig()):
+def chunk_multiple_documents(pdf_files, chunk_settings=ChunkingSentenceConfig()):
     all_chunks = []
     global_id = 0
 
     for pdf_file in pdf_files:
-        pages = read_pdf_file(pdf_file)
-        doc_id = os.path.basename(pdf_file)
-        doc_chunks = chunk_text_with_metadata(pages, doc_id, chunk_settings)
+        documents = read_pdf_file(pdf_file)
+        nodes = chunk_text_with_metadata(documents, chunk_settings)
 
-        for chunk in doc_chunks:
-            chunk['id'] = global_id
-            all_chunks.append(chunk)
+        for node in nodes:
+            node.metadata['chunk_id'] = global_id
+            all_chunks.append(node)
             global_id += 1
 
     return all_chunks
 
 
-data_folder = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw'
-pdf_files = glob.glob(f'{data_folder}\*.pdf')
+if __name__ == "__main__":
+    data_folder = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw'
+    pdf_files = glob.glob(f'{data_folder}\*.pdf')
+    docs = read_pdf_file(pdf_files[1])
+    for i in [5, 10, 15, 20]:
+        print(f"Page {i}:\n{docs[i-1].text}\n{'-'*50}")
 
-documents = read_pdf_file(pdf_files[1])
-id = 13
-print(documents[id]['text_raw'])
-print(documents[id]['text_clean'])
+    # chunk_settings = ChunkingSentenceConfig(chunk_size=400, chunk_overlap=50)
+    # chunks = chunk_multiple_documents(pdf_files, chunk_settings)
+    # print(len(chunks))
