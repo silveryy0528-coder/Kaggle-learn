@@ -17,18 +17,22 @@ class ChunkingSentenceConfig(ChunkingConfig):
     chunk_overlap: int = 50
 
 
-def sentence_splitter(documents, chunk_size, chunk_overlap):
+def sentence_splitter(full_text, chunk_size, chunk_overlap):
     splitter = SentenceSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap
     )
-    nodes = splitter.get_nodes_from_documents(documents)
-
+    nodes = splitter.split_text(full_text)
     return nodes
 
 
 def chunk_text_with_metadata(documents, settings):
-    nodes = sentence_splitter(documents, settings.chunk_size, settings.chunk_overlap)
+    full_text = "\n".join(doc.text for doc in documents)
+    nodes = sentence_splitter(
+        full_text,
+        settings.chunk_size,
+        settings.chunk_overlap
+    )
     return nodes
 
 

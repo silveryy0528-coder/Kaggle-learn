@@ -21,6 +21,13 @@ class Margin:
     right: int = 50
 
 
+@dataclass
+class Chunk:
+    chunk_id: int
+    doc_id: str
+    text: str
+
+
 margin = Margin()
 
 def clean_text(text):
@@ -39,18 +46,19 @@ def is_structure_page(text):
     return False
 
 
-BAD_SECTION_KEYWORDS = [
-    'propositions',
-    'acknowledgements',
-    'references',
-    'stellingen',
+SPECIAL_SECTIONS = [
     'samenvatting',
+    'propositions',
+    'stellingen',
+    'acknowledgements',
+    'about the author',
+    'references',
     'copyright'
 ]
 
 def is_bad_page(text):
     text_low = text.lower()
-    return any(k in text_low for k in BAD_SECTION_KEYWORDS)
+    return any(k in text_low for k in SPECIAL_SECTIONS)
 
 
 def process_page(text_clean):
@@ -98,24 +106,32 @@ def chunk_multiple_documents(pdf_files, chunk_settings=ChunkingSentenceConfig())
     global_id = 0
 
     for pdf_file in pdf_files:
-        documents = read_pdf_file(pdf_file)
-        nodes = chunk_text_with_metadata(documents, chunk_settings)
+        # 1. Read and process the PDF file into Document objects
+        pages = read_pdf_file(pdf_file)
+
+        # 2. Chunk the combined text of all pages
+        nodes = chunk_text_with_metadata(pages, chunk_settings)
 
         for node in nodes:
-            node.metadata['chunk_id'] = global_id
-            all_chunks.append(node)
+            node = clean_text(node)
+            chunk = Chunk(
+                chunk_id=global_id,
+                doc_id=pages[0].metadata['doc_id'],
+                text=node
+            )
+            all_chunks.append(chunk)
             global_id += 1
 
     return all_chunks
 
-
+#%%
 if __name__ == "__main__":
     data_folder = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw'
     pdf_files = glob.glob(f'{data_folder}\*.pdf')
-    docs = read_pdf_file(pdf_files[1])
-    for i in [5, 10, 15, 20]:
-        print(f"Page {i}:\n{docs[i-1].text}\n{'-'*50}")
 
-    # chunk_settings = ChunkingSentenceConfig(chunk_size=400, chunk_overlap=50)
-    # chunks = chunk_multiple_documents(pdf_files, chunk_settings)
-    # print(len(chunks))
+    chunk_settings = ChunkingSentenceConfig(chunk_size=400, chunk_overlap=50)
+    chunks = chunk_multiple_documents(pdf_files, chunk_settings)
+    id = 11
+    print(chunks[id].text)
+    print('--------')
+    print(chunks[id+ 1].text)

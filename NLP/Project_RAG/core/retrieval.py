@@ -1,6 +1,6 @@
 import faiss
 from dataclasses import dataclass
-from src.embedding import embed_text
+from core.embedding import embed_text
 
 
 @dataclass
