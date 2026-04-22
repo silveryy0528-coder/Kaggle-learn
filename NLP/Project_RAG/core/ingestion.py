@@ -11,42 +11,12 @@ import fitz
 import re
 from llama_index.core import Document
 from dataclasses import dataclass
-
-
-@dataclass
-class Margin:
-    top: int = 50
-    bottom: int = 50
-    left: int = 50
-    right: int = 50
-
-
-@dataclass
-class Chunk:
-    chunk_id: int
-    doc_id: str
-    text: str
-
-
-margin = Margin()
-
-def clean_text(text):
-    text = text.replace("\xa0", " ")      # non-breaking space
-    text = text.replace("\t", " ")
-    text = re.sub(r"-\n", "", text)
-    text = re.sub(r" +", " ", text)
-    return text
-
-
-def is_structure_page(text):
-    text = text.strip()
-    match = re.match(r"^(\d+)\s+(.+?)(\s+\d+)?$", text)
-    if match:
-        return True
-    return False
+from collections import Counter
 
 
 SPECIAL_SECTIONS = [
+    'list of publications',
+    'summary',
     'samenvatting',
     'propositions',
     'stellingen',
@@ -56,17 +26,74 @@ SPECIAL_SECTIONS = [
     'copyright'
 ]
 
-def is_bad_page(text):
-    text_low = text.lower()
-    return any(k in text_low for k in SPECIAL_SECTIONS)
+
+@dataclass
+class Margin:
+    top: int = 50
+    bottom: int = 50
+    left: int = 50
+    right: int = 50
+
+margin = Margin()
 
 
-def process_page(text_clean):
-    if is_structure_page(text_clean):
-        return None
-    elif is_bad_page(text_clean):
-        return None
-    return text_clean
+@dataclass
+class Chunk:
+    chunk_id: int
+    doc_id: str
+    text: str
+
+
+def clean_text(text):
+    text = text.replace("\xa0", " ")      # non-breaking space
+    text = text.replace("\t", " ")
+    text = re.sub(r"-\n", "", text)
+    text = re.sub(r" +", " ", text)
+    return text
+
+
+def is_content_page(text):
+    text = text.strip()
+    if '. . . . .' in text:
+        return True
+    return False
+
+
+def is_empty_page(text):
+    return len(text.strip()) == 0
+
+
+def is_bad_page(text_clean):
+    return (
+        is_empty_page(text_clean) or
+        is_content_page(text_clean)
+    )
+
+
+def extract_header(page):
+    rect = page.rect
+    header_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y0 + 40)
+    header_text = page.get_text("text", clip=header_rect)
+    return header_text.strip().lower()
+
+
+def extract_section_name(page):
+    # 1. Check header for special section names
+    header = extract_header(page)
+    for section_name in SPECIAL_SECTIONS:
+        if section_name in header:
+            return section_name
+
+    # 2. If header is empty, check full page text for section names
+    empty_header = len(header.strip()) == 0
+    if empty_header:
+        text = page.get_text("text").lower()
+        for section_name in SPECIAL_SECTIONS:
+            if section_name in text:
+                return section_name
+        return 'structural'
+
+    return 'body'
 
 
 def read_pdf_file(pdf_file):
@@ -77,10 +104,10 @@ def read_pdf_file(pdf_file):
     for i, page in enumerate(doc):
         # 1. Filter out pages with bad structure or content
         text = page.get_text("text")
-        cleaned = process_page(text)
-        if cleaned is None:
+        if is_bad_page(text):
             continue
 
+        section_name = extract_section_name(page)
         # 2. Apply margin filtering
         rect = page.rect
         content_rect = fitz.Rect(
@@ -94,7 +121,11 @@ def read_pdf_file(pdf_file):
 
         document = Document(
             text=text,
-            metadata={"page": i + 1, "doc_id": doc_id}
+            metadata={
+                "page": i + 1,
+                "doc_id": doc_id,
+                "section": section_name
+            }
         )
         documents.append(document)
 
@@ -129,9 +160,9 @@ if __name__ == "__main__":
     data_folder = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw'
     pdf_files = glob.glob(f'{data_folder}\*.pdf')
 
-    chunk_settings = ChunkingSentenceConfig(chunk_size=400, chunk_overlap=50)
-    chunks = chunk_multiple_documents(pdf_files, chunk_settings)
-    id = 11
-    print(chunks[id].text)
-    print('--------')
-    print(chunks[id+ 1].text)
+    pages = read_pdf_file(pdf_files[1])
+    counter = Counter(page.metadata['section'] for page in pages)
+    topk = counter.most_common(115)
+    print("Top sections in the PDF:")
+    for section, count in topk:
+        print(f"  {section}: {count} pages")
