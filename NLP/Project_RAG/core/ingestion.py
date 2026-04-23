@@ -4,26 +4,34 @@ import glob
 import os
 sys.path.insert(0, r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG')
 from core.chunking import (
-    chunk_text_with_metadata,
+    chunk_text,
     ChunkingSentenceConfig
 )
 import fitz
 import re
 from llama_index.core import Document
 from dataclasses import dataclass
-from collections import Counter
+from collections import defaultdict
 
 
 SPECIAL_SECTIONS = [
     'list of publications',
     'summary',
-    'samenvatting',
     'propositions',
-    'stellingen',
     'acknowledgements',
     'about the author',
-    'references',
-    'copyright'
+    'samenvatting',
+    'stellingen',
+    'copyright',
+    'references'
+]
+
+
+EXCLUDED_SECTIONS = [
+    'samenvatting',
+    'stellingen',
+    'copyright',
+    'references'
 ]
 
 
@@ -39,9 +47,8 @@ margin = Margin()
 
 @dataclass
 class Chunk:
-    chunk_id: int
-    doc_id: str
     text: str
+    metadata: dict
 
 
 def clean_text(text):
@@ -108,6 +115,12 @@ def read_pdf_file(pdf_file):
             continue
 
         section_name = extract_section_name(page)
+        if section_name in EXCLUDED_SECTIONS:
+            continue
+
+        if 'CV' in doc_id and section_name == 'structural':
+            section_name = 'body'
+
         # 2. Apply margin filtering
         rect = page.rect
         content_rect = fitz.Rect(
@@ -132,37 +145,68 @@ def read_pdf_file(pdf_file):
     return documents
 
 
-def chunk_multiple_documents(pdf_files, chunk_settings=ChunkingSentenceConfig()):
+def group_pages_by_section(pages):
+    sections = defaultdict(list)
+    for page in pages:
+        section_name = page.metadata['section']
+        sections[section_name].append(page)
+    return sections
+
+
+def chunk_single_document(
+        pdf_file,
+        chunk_settings=ChunkingSentenceConfig(),
+        chunk_id_offset=0):
+    # 1. Read and process the PDF file into Document objects
+    pages = read_pdf_file(pdf_file)
+    doc_id = pages[0].metadata['doc_id']
+
+    # 2. Group pages by section in {'section_name': [list of pages]}
+    sections = group_pages_by_section(pages)
+
     all_chunks = []
-    global_id = 0
-
-    for pdf_file in pdf_files:
-        # 1. Read and process the PDF file into Document objects
-        pages = read_pdf_file(pdf_file)
-
-        # 2. Chunk the combined text of all pages
-        nodes = chunk_text_with_metadata(pages, chunk_settings)
+    chunk_id = chunk_id_offset
+    for section_name, section_pages in sections.items():
+        print(f"Processing {doc_id} - Section: {section_name} with {len(section_pages)} pages")
+        nodes = chunk_text(section_pages, chunk_settings)
 
         for node in nodes:
             node = clean_text(node)
             chunk = Chunk(
-                chunk_id=global_id,
-                doc_id=pages[0].metadata['doc_id'],
-                text=node
+                text=node,
+                metadata={
+                    "section": section_name,
+                    "doc_id": doc_id,
+                    "chunk_id": chunk_id}
             )
+            chunk_id += 1
             all_chunks.append(chunk)
-            global_id += 1
 
     return all_chunks
+
+
+def chunk_multiple_documents(pdf_files, chunk_settings=ChunkingSentenceConfig()):
+    all_chunks = []
+    id_offset = 0
+
+    for pdf_file in pdf_files:
+        chunks = chunk_single_document(pdf_file, chunk_settings, id_offset)
+        id_offset += len(chunks)
+        all_chunks.extend(chunks)
+
+    return all_chunks
+
 
 #%%
 if __name__ == "__main__":
     data_folder = r'C:\Users\guoya\Documents\Git_repo\Kaggle-learn\NLP\Project_RAG\data\raw'
     pdf_files = glob.glob(f'{data_folder}\*.pdf')
 
-    pages = read_pdf_file(pdf_files[1])
-    counter = Counter(page.metadata['section'] for page in pages)
-    topk = counter.most_common(115)
-    print("Top sections in the PDF:")
-    for section, count in topk:
-        print(f"  {section}: {count} pages")
+    chunk_settings = ChunkingSentenceConfig(chunk_size=500, chunk_overlap=50)
+    chunks = chunk_multiple_documents(pdf_files, chunk_settings)
+    idx = 1
+    print(chunks[idx].metadata)
+    print(chunks[idx].text[-500:])
+    print('-------------')
+    print(chunks[idx + 1].metadata)
+    print(chunks[idx + 1].text[:500])

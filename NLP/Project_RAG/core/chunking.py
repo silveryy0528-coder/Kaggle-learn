@@ -26,7 +26,7 @@ def sentence_splitter(full_text, chunk_size, chunk_overlap):
     return nodes
 
 
-def chunk_text_with_metadata(documents, settings):
+def chunk_text(documents, settings):
     full_text = "\n".join(doc.text for doc in documents)
     nodes = sentence_splitter(
         full_text,
