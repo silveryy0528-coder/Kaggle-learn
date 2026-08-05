@@ -41,3 +41,5 @@ np.save(embedding_file, embeddings)
 
 index_file = os.path.join(data_folder.replace('raw', 'index'), 'faiss.index')
 faiss.write_index(index, index_file)
+
+print("Index and metadata saved successfully")

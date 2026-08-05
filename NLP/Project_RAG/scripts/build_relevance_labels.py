@@ -9,7 +9,7 @@ from rapidfuzz import fuzz
 
 from core.ingestion import chunk_multiple_documents
 
-THRESHOLD = 57
+THRESHOLD = 60
 
 
 def load_qa_dataset(qa_path):
@@ -27,10 +27,13 @@ def find_relevant_chunks(answer, chunks, question=None):
     relevant_ids = []
 
     for chunk in chunks:
-        score = fuzz.partial_ratio(answer.lower(), chunk["text"].lower())
+        score_answer = fuzz.partial_ratio(answer.lower(), chunk.text.lower())
+        score_question = fuzz.partial_ratio(question.lower(), chunk.text.lower())
+
+        score = 1 * score_answer + 0. * score_question
 
         if score >= THRESHOLD:
-            relevant_ids.append(chunk["id"])
+            relevant_ids.append(chunk.metadata["chunk_id"])
 
     if len(relevant_ids) == 0:
         print("NO MATCH")
@@ -63,8 +66,9 @@ def main():
 
         labeled_data.append({
             "question": item["question"],
+            "answer": answer,
             "relevant_chunk_ids": relevant_chunks,
-            "method": "fuzzy_match"
+            "answer_type": item['type']
         })
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
